@@ -1,4 +1,5 @@
 #include <AccelStepper.h>
+#include <LiquidCrystal.h>
 
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
@@ -6,11 +7,22 @@
 
 #define STEP_ACCURACY      16
 
+#define LCD_RS             16
+#define LCD_EN             17
+#define LCD_PIN_1          23
+#define LCD_PIN_2          25
+#define LCD_PIN_3          27
+#define LCD_PIN_4          29
+
 #define LED_PIN            13
 
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
+LiquidCrystal lcd(LCD_RS,LCD_EN,LCD_PIN_1,LCD_PIN_2,LCD_PIN_3,LCD_PIN_4);
 int rpm = 10;
 
+///////////////////////////////////
+// MOTOR CONTROL
+//////////////////////////////////
 void setupMotorTimer() {
   noInterrupts();
   TCCR1A = 0;
@@ -35,15 +47,20 @@ void setupMotorInit() {
   motor.setSpeed(calculateSpeed(rpm));
 }
 
+ISR(TIMER1_COMPA_vect) {
+  motor.runSpeed();
+}
+//////////////////////////////////////////////
+
 void setup() {
   setupMotorInit();
   setupMotorTimer();
-}
-
-ISR(TIMER1_COMPA_vect) {
-  motor.runSpeed();
+  lcd.begin(20,4);
+  lcd.print("Hello World!");
 }
 
 void loop() {
   //To fill
+  lcd.setCursor(0,1);
+  lcd.print(millis() / 1000);
 }
