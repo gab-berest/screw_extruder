@@ -2,6 +2,9 @@
 #define TEMP_0_PIN    13
 #define FAN_PIN       9
 
+
+#define OUTPUT 1
+
 using namespace std;
 
 class Temperature {
@@ -15,4 +18,4 @@ class Temperature {
   private:
     int _current_temp = 0;
     int _set_temp = 0;
-}
+};
