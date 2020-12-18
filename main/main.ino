@@ -1,6 +1,7 @@
 #include <AccelStepper.h>
 #include <LiquidCrystal.h>
 #include <LiquidMenu.h>
+#include <PID_v1.h>
 
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
@@ -29,6 +30,11 @@
 
 #define LED_PIN            13
 
+#define TEMP_INPUT_PIN_1   3
+#define TEMP_INPUT_PIN_2   13
+#define TEMP_OUTPUT_PIN_1  8
+#define TEMP_OUTPUT_PIN_2  9
+
 struct Menu {
   int id = 0;
   int value = 0;
@@ -38,6 +44,8 @@ struct Menu {
 int flag_left = 0;
 int flag_right = 0;
 int flag_click = 0;
+int flag_temp = 0;
+int temp_update = 0;
 
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
 int rpm_old = 0;
@@ -59,6 +67,16 @@ int encoder_turn_status_old = LOW;
 int encoder_turn_status = LOW;                                           
 int encoder_click_status = HIGH;
 int encoder_click_status_old = HIGH; 
+
+int Kd = 2;
+int Kp = 5;
+int Ki = 1;
+double set_point_1, input_1, output_1;
+PID temp_1(&input_1, &output_1, &set_point_1, Kd, Kp, Ki, DIRECT);
+double set_point_2, input_2, output_2;
+PID temp_2(&input_2, &output_2, &set_point_2, Kd, Kp, Ki, DIRECT);
+int window_size = 5000;
+unsigned long window_start_time;
 
 ///////////////////////////////////
 // MOTOR CONTROL
@@ -150,7 +168,8 @@ void left() {
       menu--;
   }
   else {
-    screen[menu]->value--;
+    if (screen[menu]->value > 0)
+      screen[menu]->value--;
   } 
   updateScreen();
 }
@@ -175,8 +194,10 @@ void updateValue() {
     lcd.setCursor(17, 2);
     lcd.print(screen[2]->value);
   }
-  //else if (menu == 1)
-    //temperature_value = temp.value;
+  else if (menu == 1) {
+    set_point_1 = temperature.value;
+    set_point_2 = set_point_1/4;
+  }
 }
 
 void updateScreen() {
@@ -207,6 +228,40 @@ void updateScreen() {
   }
   menu_old = menu;
   menu_level_old = menu_level;
+}
+
+void updateTemperature() {
+  lcd.setCursor(13, 3);
+  lcd.print("   /");
+  lcd.setCursor(13, 3);
+  if (input_1 < 10) {
+    lcd.print("  ");
+    lcd.print((int)input_1);
+  }
+  else if (input_1 < 100) {
+    lcd.print(" ");
+    lcd.print((int)input_1);
+  }
+  else if (input_1 < 1000)
+    lcd.print((int)input_1);
+  else
+    lcd.print(999);
+  
+  lcd.setCursor(17, 3);
+  lcd.print("   ");
+  lcd.setCursor(17, 3);
+  if (input_2 < 10) {
+    lcd.print("  ");
+    lcd.print((int)input_1);
+  }
+  else if (input_2 < 100) {
+    lcd.print(" ");
+    lcd.print((int)input_1);
+  }
+  else if (input_2 < 1000)
+    lcd.print((int)input_2);
+  else
+    lcd.print(999);
 }
 //////////////////////////////////////////////
 
@@ -251,13 +306,42 @@ ISR(TIMER2_COMPA_vect) {
 //////////////////////////////////////////////
 // TEMPERATURE CONTROL
 //////////////////////////////////////////////
+void setupTemp() {
+  pinMode(TEMP_OUTPUT_PIN_1, OUTPUT);
+  pinMode(TEMP_OUTPUT_PIN_2, OUTPUT);
 
+  window_start_time = millis();
+  set_point_1 = 0;
+  set_point_2 = 0;
+
+  temp_1.SetOutputLimits(0, window_size);
+  temp_2.SetOutputLimits(0, window_size);
+
+  temp_1.SetMode(AUTOMATIC);
+  temp_2.SetMode(AUTOMATIC);
+
+  noInterrupts();
+  TCCR3A = 0;
+  TCCR3B = 0;
+  TCNT3 = 0;
+  OCR3A = 14;
+  TCCR3B |= (1 << WGM12);
+  TCCR3B |= (1 << CS12) | (1 << CS10);
+  TIMSK3 |= (1 << OCIE3A);
+  interrupts();
+}
+
+ISR(TIMER3_COMPA_vect) {
+  flag_temp = 1;
+  temp_update++;
+}
 //////////////////////////////////////////////
 
 void setup() {
-  setupMotorInit();
-  setupMotorTimer();
-  setupEncoder();
+  //setupMotorInit();
+  //setupMotorTimer();
+  //setupEncoder();
+  setupTemp();
   setupLCD();
   Serial.begin(9600);
 }
@@ -275,5 +359,29 @@ void loop() {
   if (flag_click == 1) {
     click();
     flag_click = 0;
+  }
+
+  if (flag_temp == 1) {
+    input_1 = analogRead(TEMP_INPUT_PIN_1);
+    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+    Serial.print("\n");
+    input_2 = analogRead(TEMP_INPUT_PIN_2);
+    temp_1.Compute();
+    temp_2.Compute();
+  
+    unsigned long now = millis();
+    if (now - window_start_time > window_size) {
+      window_start_time += window_size;
+    }
+    if (output_1 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_1, HIGH);
+    else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
+    if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
+    else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+
+    if (temp_update >= 500) {
+      updateTemperature();
+      temp_update = 0;
+    }
+    flag_temp = 0;
   }
 }
