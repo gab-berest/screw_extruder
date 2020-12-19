@@ -1,6 +1,5 @@
 #include <AccelStepper.h>
 #include <LiquidCrystal.h>
-#include <LiquidMenu.h>
 #include <PID_v1.h>
 
 #define E_STEP_PIN         26
@@ -8,6 +7,7 @@
 #define E_ENABLE_PIN       24
 
 #define STEP_ACCURACY      1
+#define GEARBOX            15
 #define MAX_STEP_SPEED     10000
 
 #define LCD_RS             16
@@ -94,7 +94,7 @@ void setupMotorTimer() {
 }
 
 int calculateSpeed(float set_rpm) {
-  return (360.0/1.8*STEP_ACCURACY)*set_rpm/60.0;
+  return (360.0/1.8*STEP_ACCURACY)*set_rpm/60.0*GEARBOX;
 }
 
 void setupMotorInit() {
@@ -338,12 +338,11 @@ ISR(TIMER3_COMPA_vect) {
 //////////////////////////////////////////////
 
 void setup() {
-  //setupMotorInit();
-  //setupMotorTimer();
-  //setupEncoder();
+  setupMotorInit();
+  setupMotorTimer();
+  setupEncoder();
   setupTemp();
   setupLCD();
-  Serial.begin(9600);
 }
 
 void loop() {
@@ -364,7 +363,6 @@ void loop() {
   if (flag_temp == 1) {
     input_1 = analogRead(TEMP_INPUT_PIN_1);
     input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
-    Serial.print("\n");
     input_2 = analogRead(TEMP_INPUT_PIN_2);
     temp_1.Compute();
     temp_2.Compute();
