@@ -8,7 +8,7 @@
 
 #define STEP_ACCURACY      1
 #define GEARBOX            15
-#define MAX_STEP_SPEED     10000
+#define MAX_STEP_SPEED     1000
 
 #define LCD_RS             16
 #define LCD_EN             17
@@ -31,7 +31,7 @@
 #define LED_PIN            13
 
 #define TEMP_INPUT_PIN_1   3
-#define TEMP_INPUT_PIN_2   13
+#define TEMP_INPUT_PIN_2   4
 #define TEMP_OUTPUT_PIN_1  8
 #define TEMP_OUTPUT_PIN_2  9
 
@@ -68,9 +68,9 @@ int encoder_turn_status = LOW;
 int encoder_click_status = HIGH;
 int encoder_click_status_old = HIGH; 
 
-int Kd = 2;
-int Kp = 5;
-int Ki = 1;
+int Kd = 500;
+int Kp = 1;
+int Ki = 0.5;
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kd, Kp, Ki, DIRECT);
 double set_point_2, input_2, output_2;
@@ -88,7 +88,7 @@ void setupMotorTimer() {
   TCNT1 = 0;
   OCR1A = 1;
   TCCR1B |= (1 << WGM12);
-  TCCR1B |= (1 << CS11) | (1 << CS10);
+  TCCR1B |= (1 << CS12);
   TIMSK1 |= (1 << OCIE1A);
   interrupts();
 }
@@ -252,11 +252,11 @@ void updateTemperature() {
   lcd.setCursor(17, 3);
   if (input_2 < 10) {
     lcd.print("  ");
-    lcd.print((int)input_1);
+    lcd.print((int)input_2);
   }
   else if (input_2 < 100) {
     lcd.print(" ");
-    lcd.print((int)input_1);
+    lcd.print((int)input_2);
   }
   else if (input_2 < 1000)
     lcd.print((int)input_2);
@@ -326,7 +326,7 @@ void setupTemp() {
   TCNT3 = 0;
   OCR3A = 14;
   TCCR3B |= (1 << WGM12);
-  TCCR3B |= (1 << CS12) | (1 << CS10);
+  TCCR3B |= (1 << CS12);
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
 }
@@ -364,6 +364,7 @@ void loop() {
     input_1 = analogRead(TEMP_INPUT_PIN_1);
     input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
     input_2 = analogRead(TEMP_INPUT_PIN_2);
+    input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
     temp_1.Compute();
     temp_2.Compute();
   
