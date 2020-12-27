@@ -35,6 +35,9 @@
 #define TEMP_OUTPUT_PIN_1  8
 #define TEMP_OUTPUT_PIN_2  9
 
+#define THRESHHOLD_HIGH    101
+#define THRESHHOLD_LOW     99
+
 struct Menu {
   int id = 0;
   int value = 0;
@@ -68,15 +71,24 @@ int encoder_turn_status = LOW;
 int encoder_click_status = HIGH;
 int encoder_click_status_old = HIGH; 
 
-int Kd = 500;
-int Kp = 1;
-int Ki = 0.5;
+int Kd = 200;
+int Kp = 2;
+int Ki = 1;
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kd, Kp, Ki, DIRECT);
 double set_point_2, input_2, output_2;
 PID temp_2(&input_2, &output_2, &set_point_2, Kd, Kp, Ki, DIRECT);
 int window_size = 5000;
 unsigned long window_start_time;
+
+double abs_max = 0;
+double abs_min = 100;
+unsigned long abs_max_time_1 = 0;
+unsigned long abs_min_time_1 = 0;
+unsigned long abs_max_time_2 = 0;
+unsigned long abs_min_time_2 = 0;
+int init_tuning = 0;
+
 
 ///////////////////////////////////
 // MOTOR CONTROL
@@ -314,8 +326,8 @@ void setupTemp() {
   set_point_1 = 0;
   set_point_2 = 0;
 
-  temp_1.SetOutputLimits(0, window_size);
-  temp_2.SetOutputLimits(0, window_size);
+  temp_1.SetOutputLimits(0, window_size/2);
+  temp_2.SetOutputLimits(0, window_size/2);
 
   temp_1.SetMode(AUTOMATIC);
   temp_2.SetMode(AUTOMATIC);
@@ -329,20 +341,120 @@ void setupTemp() {
   TCCR3B |= (1 << CS12);
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
+
+  /*
+  while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1));
+  double D, A, Pu, Ku;
+  D = 120/2;
+  A = abs_max - abs_min;
+  Pu = abs_max_time_2 - abs_max_time_1;
+  Ku = 4*D/(3.14159*A);
+  Kp = 0.6*Ku;
+  Ki = 1.2*Ku/Pu;
+  Kd = 0.000075*Ku*Pu;
+  Serial.print("D=");
+  Serial.print(D);
+  Serial.print("\n");
+  Serial.print("A=");
+  Serial.print(A);
+  Serial.print("\n");
+  Serial.print("Pu=");
+  Serial.print(Pu);
+  Serial.print("\n");
+  Serial.print("Ku=");
+  Serial.print(Ku);
+  Serial.print("\n");
+  Serial.print("Kp=");
+  Serial.print(Kp);
+  Serial.print("\n");
+  Serial.print("Ki=");
+  Serial.print(Ki);
+  Serial.print("\n");
+  Serial.print("Kd=");
+  Serial.print(Kd);
+  Serial.print("\n");
+  delay(5000);
+  temp_1.SetTunings(Kp, Ki, Kd);
+  */
 }
 
 ISR(TIMER3_COMPA_vect) {
   flag_temp = 1;
   temp_update++;
 }
+
+bool autoTune(int input_pin, int output_pin) {
+  if (flag_temp == 1) {
+    if (temp_update >= 2500) {
+      Serial.print("init_tuning=");
+      Serial.print(init_tuning);
+      Serial.print("\n");
+      Serial.print("input_1=");
+      Serial.print(input_1);
+      Serial.print("\n");
+      Serial.print("time_1=");
+      Serial.print(abs_max_time_1);
+      Serial.print("\n");
+      Serial.print("time_2=");
+      Serial.print(abs_max_time_2);
+      Serial.print("\n");
+      temp_update = 0;
+    }
+    input_1 = analogRead(input_pin);
+    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+
+    if (input_1 > THRESHHOLD_HIGH) {
+      digitalWrite(output_pin, LOW);
+      if (init_tuning == 0)
+        init_tuning = 1;
+      else if (init_tuning == 2)
+        init_tuning = 3;
+      else if (init_tuning == 4)
+        init_tuning = 5;
+    }
+    else if (input_1 < THRESHHOLD_LOW) {
+      digitalWrite(output_pin, HIGH);
+      if (init_tuning == 1)
+        init_tuning = 2;
+      else if (init_tuning == 3)
+        init_tuning = 4;
+      else if (init_tuning == 5) {
+        digitalWrite(output_pin, LOW);
+        return true;
+      }
+    }
+
+    if (input_1 >= abs_max && init_tuning == 3) {
+      abs_max = input_1;
+      abs_max_time_1 = millis(); 
+    }
+    
+    if (input_1 < abs_min && init_tuning == 2) {
+      abs_min = input_1;
+      abs_min_time_1 = millis();
+    }
+
+    if (input_1 >= abs_max && init_tuning == 5) {
+      abs_max = input_1;
+      abs_max_time_2 = millis(); 
+    }
+    
+    if (input_1 < abs_min && init_tuning == 4) {
+      abs_min = input_1;
+      abs_min_time_2 = millis();
+    }
+  }
+  return false;
+}
 //////////////////////////////////////////////
 
 void setup() {
+  Serial.begin(9600);
+  setupLCD();
+  setupTemp();
   setupMotorInit();
   setupMotorTimer();
   setupEncoder();
-  setupTemp();
-  setupLCD();
 }
 
 void loop() {
@@ -378,6 +490,12 @@ void loop() {
     else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
 
     if (temp_update >= 500) {
+      Serial.print("input_1=");
+      Serial.print(input_1);
+      Serial.print("\n");
+      Serial.print("out_put_1=");
+      Serial.print(output_1);
+      Serial.print("\n");
       updateTemperature();
       temp_update = 0;
     }
