@@ -352,29 +352,27 @@ void setupTemp() {
   Kp = 0.6*Ku;
   Ki = 1.2*Ku/Pu;
   Kd = 0.000075*Ku*Pu;
-  Serial.print("D=");
-  Serial.print(D);
-  Serial.print("\n");
-  Serial.print("A=");
-  Serial.print(A);
-  Serial.print("\n");
-  Serial.print("Pu=");
-  Serial.print(Pu);
-  Serial.print("\n");
-  Serial.print("Ku=");
-  Serial.print(Ku);
-  Serial.print("\n");
-  Serial.print("Kp=");
-  Serial.print(Kp);
-  Serial.print("\n");
-  Serial.print("Ki=");
-  Serial.print(Ki);
-  Serial.print("\n");
-  Serial.print("Kd=");
-  Serial.print(Kd);
-  Serial.print("\n");
   delay(5000);
   temp_1.SetTunings(Kp, Ki, Kd);
+
+  abs_max = 0;
+  abs_min = 100;
+  abs_max_time_1 = 0;
+  abs_min_time_1 = 0;
+  abs_max_time_2 = 0;
+  abs_min_time_2 = 0;
+  init_tuning = 0;
+
+  while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2));
+  D = 120/2;
+  A = abs_max - abs_min;
+  Pu = abs_max_time_2 - abs_max_time_1;
+  Ku = 4*D/(3.14159*A);
+  Kp = 0.6*Ku;
+  Ki = 1.2*Ku/Pu;
+  Kd = 0.000075*Ku*Pu;
+  delay(5000);
+  temp_2.SetTunings(Kp, Ki, Kd);
   */
 }
 
