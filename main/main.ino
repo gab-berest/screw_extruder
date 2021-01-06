@@ -26,7 +26,9 @@
 #define ENCODER_RIGHT_PIN  31    
 #define ENCODER_CLICK_PIN  35
 #define BUTTON_DEBOUNCE    10
-#define BUZZER             -1
+#define BUZZER             37
+
+#define SDCARDDETECT       49
 
 #define LED_PIN            13
 
@@ -49,6 +51,7 @@ int flag_right = 0;
 int flag_click = 0;
 int flag_temp = 0;
 int temp_update = 0;
+int buzzer_update = 0;
 
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
 int rpm_old = 0;
@@ -88,6 +91,8 @@ unsigned long abs_min_time_1 = 0;
 unsigned long abs_max_time_2 = 0;
 unsigned long abs_min_time_2 = 0;
 int init_tuning = 0;
+
+bool safety_stop = false;
 
 
 ///////////////////////////////////
@@ -131,12 +136,14 @@ ISR(TIMER1_COMPA_vect) {
 //////////////////////////////////////////////
 void setupLCD() {
   lcd.begin(LCD_WIDTH, LCD_HEIGHT);
+  pinMode(BUZZER, OUTPUT);
+  digitalWrite(BUZZER, LOW);
   
   rpm.id = 0;
   rpm.value = 0;
   strcpy(rpm.label, "RPM: ");
   temperature.id = 1;
-  temperature.value = 0;
+  temperature.value = 25;
   strcpy(temperature.label, "TEMP: ");
   rpm_current.id = 2;
   rpm_current.value = rpm_value;
@@ -208,7 +215,7 @@ void updateValue() {
   }
   else if (menu == 1) {
     set_point_1 = temperature.value;
-    set_point_2 = set_point_1/4;
+    set_point_2 = set_point_1/2;
   }
 }
 
@@ -275,6 +282,24 @@ void updateTemperature() {
   else
     lcd.print(999);
 }
+
+void initSafety() {
+  lcd.clear();
+  lcd.print("  THERMAL MAXIMUM!  ");
+  lcd.setCursor(0,1);
+  lcd.print("SHUTTING HEATER OFF!");
+  lcd.setCursor(0,2);
+  lcd.print("UNTIL:    <50");
+  lcd.setCursor(0,3);
+  lcd.print("UNTIL:    <50");
+}
+
+void updateSafety() {
+  lcd.setCursor(7,2);
+  lcd.print(input_1);
+  lcd.setCursor(7,3);
+  lcd.print(input_2);
+}
 //////////////////////////////////////////////
 
 //////////////////////////////////////////////
@@ -322,9 +347,12 @@ void setupTemp() {
   pinMode(TEMP_OUTPUT_PIN_1, OUTPUT);
   pinMode(TEMP_OUTPUT_PIN_2, OUTPUT);
 
+  digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
+  digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+
   window_start_time = millis();
-  set_point_1 = 0;
-  set_point_2 = 0;
+  set_point_1 = 25;
+  set_point_2 = 25;
 
   temp_1.SetOutputLimits(0, window_size/2);
   temp_2.SetOutputLimits(0, window_size/2);
@@ -342,8 +370,8 @@ void setupTemp() {
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
 
-  /*
-  while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1));
+  Serial.print("Tuning...\n");
+  while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH));
   double D, A, Pu, Ku;
   D = 120/2;
   A = abs_max - abs_min;
@@ -351,7 +379,28 @@ void setupTemp() {
   Ku = 4*D/(3.14159*A);
   Kp = 0.6*Ku;
   Ki = 1.2*Ku/Pu;
-  Kd = 0.000075*Ku*Pu;
+  Kd = 0.0000075*Ku*Pu;
+  Serial.print("D=");
+  Serial.print(D);
+  Serial.print("\n");
+  Serial.print("A=");
+  Serial.print(A);
+  Serial.print("\n");
+  Serial.print("Pu=");
+  Serial.print(Pu);
+  Serial.print("\n");
+  Serial.print("Ku=");
+  Serial.print(Ku);
+  Serial.print("\n");
+  Serial.print("Kp=");
+  Serial.print(Kp);
+  Serial.print("\n");
+  Serial.print("Ki=");
+  Serial.print(Ki);
+  Serial.print("\n");
+  Serial.print("Kd=");
+  Serial.print(Kd);
+  Serial.print("\n");
   delay(5000);
   temp_1.SetTunings(Kp, Ki, Kd);
 
@@ -363,25 +412,46 @@ void setupTemp() {
   abs_min_time_2 = 0;
   init_tuning = 0;
 
-  while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2));
+  /*while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH));
   D = 120/2;
   A = abs_max - abs_min;
   Pu = abs_max_time_2 - abs_max_time_1;
   Ku = 4*D/(3.14159*A);
   Kp = 0.6*Ku;
   Ki = 1.2*Ku/Pu;
-  Kd = 0.000075*Ku*Pu;
+  Kd = 0.0075*Ku*Pu;
+  Serial.print("D=");
+  Serial.print(D);
+  Serial.print("\n");
+  Serial.print("A=");
+  Serial.print(A);
+  Serial.print("\n");
+  Serial.print("Pu=");
+  Serial.print(Pu);
+  Serial.print("\n");
+  Serial.print("Ku=");
+  Serial.print(Ku);
+  Serial.print("\n");
+  Serial.print("Kp=");
+  Serial.print(Kp);
+  Serial.print("\n");
+  Serial.print("Ki=");
+  Serial.print(Ki);
+  Serial.print("\n");
+  Serial.print("Kd=");
+  Serial.print(Kd);
+  Serial.print("\n");
   delay(5000);
-  temp_2.SetTunings(Kp, Ki, Kd);
-  */
+  temp_2.SetTunings(Kp, Ki, Kd);*/
 }
 
 ISR(TIMER3_COMPA_vect) {
   flag_temp = 1;
   temp_update++;
+  buzzer_update++;
 }
 
-bool autoTune(int input_pin, int output_pin) {
+bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high) {
   if (flag_temp == 1) {
     if (temp_update >= 2500) {
       Serial.print("init_tuning=");
@@ -401,7 +471,7 @@ bool autoTune(int input_pin, int output_pin) {
     input_1 = analogRead(input_pin);
     input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
 
-    if (input_1 > THRESHHOLD_HIGH) {
+    if (input_1 > thresh_high) {
       digitalWrite(output_pin, LOW);
       if (init_tuning == 0)
         init_tuning = 1;
@@ -410,7 +480,7 @@ bool autoTune(int input_pin, int output_pin) {
       else if (init_tuning == 4)
         init_tuning = 5;
     }
-    else if (input_1 < THRESHHOLD_LOW) {
+    else if (input_1 < thresh_low) {
       digitalWrite(output_pin, HIGH);
       if (init_tuning == 1)
         init_tuning = 2;
@@ -481,22 +551,62 @@ void loop() {
     unsigned long now = millis();
     if (now - window_start_time > window_size) {
       window_start_time += window_size;
+    }   
+
+    ////////////////AUTOMATIC SAFETY/////////////////////////
+    if (input_1 > 430 || input_2 > 430 || safety_stop) {
+      output_1 = 0;
+      output_2 = 0;
+      if (!safety_stop) {
+        digitalWrite(BUZZER, HIGH);
+        initSafety();
+        safety_stop = true;
+      }
     }
+    if (input_1 < 50 && input_2 < 50 && safety_stop) {
+      digitalWrite(BUZZER, LOW);
+      setupLCD();
+      safety_stop = false;
+    }
+    ///////////////////////////////////////////////////////////
+    
     if (output_1 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_1, HIGH);
     else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
     if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
     else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
 
-    if (temp_update >= 500) {
+    if (temp_update >= 5000 && !safety_stop) {
       Serial.print("input_1=");
       Serial.print(input_1);
       Serial.print("\n");
-      Serial.print("out_put_1=");
+      Serial.print("output_1=");
       Serial.print(output_1);
+      Serial.print("\n");
+      Serial.print("input_2=");
+      Serial.print(input_2);
+      Serial.print("\n");
+      Serial.print("output_2=");
+      Serial.print(output_2);
       Serial.print("\n");
       updateTemperature();
       temp_update = 0;
     }
+
+    if (buzzer_update >= 2500 && !safety_stop) {
+      if (input_1 > set_point_1 + 20) {
+        digitalWrite(BUZZER, LOW); //digitalWrite(BUZZER, !digitalRead(BUZZER));
+      }
+      else {
+        digitalWrite(BUZZER, LOW);
+      }
+      buzzer_update = 0;
+    }
+        
+    else if(temp_update >= 1000 && safety_stop) {
+      updateSafety();
+      temp_update = 0;
+    }
+    
     flag_temp = 0;
   }
 }
