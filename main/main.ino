@@ -37,8 +37,8 @@
 #define TEMP_OUTPUT_PIN_1  8
 #define TEMP_OUTPUT_PIN_2  9
 
-#define THRESHHOLD_HIGH    101
-#define THRESHHOLD_LOW     99
+#define THRESHHOLD_HIGH    102
+#define THRESHHOLD_LOW     98
 
 struct Menu {
   int id = 0;
@@ -175,7 +175,7 @@ void right() {
     if (menu < (SETTING_MENU-1))
       menu++;
   }
-  else {
+  else if (screen[menu] < 425){
     screen[menu]->value++;
   }  
   updateScreen();
@@ -283,6 +283,25 @@ void updateTemperature() {
     lcd.print(999);
 }
 
+void updateTemperatureTune(int id, int temp_1) {
+  lcd.setCursor(15, 3);
+  lcd.print(id);
+  lcd.print(": ");
+  lcd.setCursor(17, 3);
+  if (temp_1 < 10) {
+    lcd.print("  ");
+    lcd.print((int)temp_1);
+  }
+  else if (temp_1 < 100) {
+    lcd.print(" ");
+    lcd.print((int)temp_1);
+  }
+  else if (temp_1 < 1000)
+    lcd.print((int)temp_1);
+  else
+    lcd.print(999);
+}
+
 void initSafety() {
   lcd.clear();
   lcd.print("  THERMAL MAXIMUM!  ");
@@ -370,9 +389,10 @@ void setupTemp() {
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
 
-  Serial.print("Tuning...\n");
-  while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH));
   double D, A, Pu, Ku;
+
+  Serial.print("Tuning...\n");
+  /*while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1));
   D = 120/2;
   A = abs_max - abs_min;
   Pu = abs_max_time_2 - abs_max_time_1;
@@ -402,7 +422,7 @@ void setupTemp() {
   Serial.print(Kd);
   Serial.print("\n");
   delay(5000);
-  temp_1.SetTunings(Kp, Ki, Kd);
+  temp_1.SetTunings(Kp, Ki, Kd);*/
 
   abs_max = 0;
   abs_min = 100;
@@ -412,10 +432,10 @@ void setupTemp() {
   abs_min_time_2 = 0;
   init_tuning = 0;
 
-  /*while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH));
+  while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 2));
   D = 120/2;
   A = abs_max - abs_min;
-  Pu = abs_max_time_2 - abs_max_time_1;
+  Pu = abs_min_time_2 - abs_min_time_1;
   Ku = 4*D/(3.14159*A);
   Kp = 0.6*Ku;
   Ki = 1.2*Ku/Pu;
@@ -442,7 +462,7 @@ void setupTemp() {
   Serial.print(Kd);
   Serial.print("\n");
   delay(5000);
-  temp_2.SetTunings(Kp, Ki, Kd);*/
+  temp_2.SetTunings(Kp, Ki, Kd);
 }
 
 ISR(TIMER3_COMPA_vect) {
@@ -451,21 +471,10 @@ ISR(TIMER3_COMPA_vect) {
   buzzer_update++;
 }
 
-bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high) {
+bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
   if (flag_temp == 1) {
     if (temp_update >= 2500) {
-      Serial.print("init_tuning=");
-      Serial.print(init_tuning);
-      Serial.print("\n");
-      Serial.print("input_1=");
-      Serial.print(input_1);
-      Serial.print("\n");
-      Serial.print("time_1=");
-      Serial.print(abs_max_time_1);
-      Serial.print("\n");
-      Serial.print("time_2=");
-      Serial.print(abs_max_time_2);
-      Serial.print("\n");
+      updateTemperatureTune(id, input_1);
       temp_update = 0;
     }
     input_1 = analogRead(input_pin);
@@ -575,8 +584,8 @@ void loop() {
     if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
     else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
 
-    if (temp_update >= 5000 && !safety_stop) {
-      Serial.print("input_1=");
+    if (temp_update >= 2500 && !safety_stop) {
+      /*Serial.print("input_1=");
       Serial.print(input_1);
       Serial.print("\n");
       Serial.print("output_1=");
@@ -587,7 +596,7 @@ void loop() {
       Serial.print("\n");
       Serial.print("output_2=");
       Serial.print(output_2);
-      Serial.print("\n");
+      Serial.print("\n");*/
       updateTemperature();
       temp_update = 0;
     }
