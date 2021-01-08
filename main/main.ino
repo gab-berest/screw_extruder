@@ -376,8 +376,8 @@ void setupTemp() {
   pinMode(TEMP_OUTPUT_PIN_1, OUTPUT);
   pinMode(TEMP_OUTPUT_PIN_2, OUTPUT);
 
-  digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
-  digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+  pinMode(TEMP_INPUT_PIN_1, INPUT);
+  pinMode(TEMP_INPUT_PIN_2, INPUT);
 
   window_start_time = millis();
   set_point_1 = 25;
