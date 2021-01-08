@@ -170,12 +170,22 @@ void setupLCD() {
    menu_old = 0;
 }
 
+void setupLCDTune() {
+  setupLCD();
+  lcd.setCursor(0,0);
+  lcd.print("Tuning heat bands...");
+  lcd.setCursor(0,1);
+  lcd.print("  Setting to 100oC  ");
+  lcd.setCursor(0,2);
+  lcd.print("Kp=    Kd=    Ki=    ");
+}
+
 void right() {
   if (menu_level == 0) {
     if (menu < (SETTING_MENU-1))
       menu++;
   }
-  else if (screen[menu] < 425){
+  else {// if (screen[menu] < 425){
     screen[menu]->value++;
   }  
   updateScreen();
@@ -390,39 +400,59 @@ void setupTemp() {
   interrupts();
 
   double D, A, Pu, Ku;
-
-  Serial.print("Tuning...\n");
   /*while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1));
   D = 120/2;
   A = abs_max - abs_min;
   Pu = abs_max_time_2 - abs_max_time_1;
   Ku = 4*D/(3.14159*A);
   Kp = 0.6*Ku;
-  Ki = 1.2*Ku/Pu;
-  Kd = 0.0000075*Ku*Pu;
-  Serial.print("D=");
-  Serial.print(D);
-  Serial.print("\n");
-  Serial.print("A=");
-  Serial.print(A);
-  Serial.print("\n");
-  Serial.print("Pu=");
-  Serial.print(Pu);
-  Serial.print("\n");
-  Serial.print("Ku=");
-  Serial.print(Ku);
-  Serial.print("\n");
-  Serial.print("Kp=");
-  Serial.print(Kp);
-  Serial.print("\n");
-  Serial.print("Ki=");
-  Serial.print(Ki);
-  Serial.print("\n");
-  Serial.print("Kd=");
-  Serial.print(Kd);
-  Serial.print("\n");
-  delay(5000);
-  temp_1.SetTunings(Kp, Ki, Kd);*/
+  Ki = 10*1.2*Ku/Pu;
+  Kd = 0.00075*Ku*Pu;
+  lcd.setCursor(3,2);
+  if (Kp < 10) {
+    lcd.print("  "); 
+    lcd.print((int)Kp);
+  }
+  else if (Kp < 100) {
+    lcd.print(" ");
+    lcd.print((int)Kp);
+  }
+  else if (Kp < 1000)
+    lcd.print((int)Kp);
+  else
+    lcd.print((int)Kp);
+  
+  lcd.setCursor(10,2);
+  if (Kd < 10) {
+    lcd.print("  ");
+    lcd.print((int)Kd);
+  }
+  else if (Kd < 100) {
+    lcd.print(" ");
+    lcd.print((int)Kd);
+  }
+  else if (Kd < 1000)
+    lcd.print((int)Kd);
+  else
+    lcd.print((int)Kd);
+    
+  lcd.setCursor(17,2);
+  if (Ki < 10) {
+    lcd.print("  ");
+    lcd.print((int)Ki);
+  }
+  else if (Ki < 100) {
+    lcd.print(" ");
+    lcd.print((int)Ki);
+  }
+  else if (Ki < 1000)
+    lcd.print((int)Ki);
+  else
+    lcd.print((int)Ki);
+  delay(30000);
+  temp_1.SetTunings(Kp, Ki, Kd);
+  lcd.setCursor(0,2);
+  lcd.print("Kp=    Kd=    Ki=    ");*/
 
   abs_max = 0;
   abs_min = 100;
@@ -432,37 +462,57 @@ void setupTemp() {
   abs_min_time_2 = 0;
   init_tuning = 0;
 
-  while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 2));
+  /*while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 2));
   D = 120/2;
   A = abs_max - abs_min;
   Pu = abs_min_time_2 - abs_min_time_1;
   Ku = 4*D/(3.14159*A);
   Kp = 0.6*Ku;
-  Ki = 1.2*Ku/Pu;
-  Kd = 0.0075*Ku*Pu;
-  Serial.print("D=");
-  Serial.print(D);
-  Serial.print("\n");
-  Serial.print("A=");
-  Serial.print(A);
-  Serial.print("\n");
-  Serial.print("Pu=");
-  Serial.print(Pu);
-  Serial.print("\n");
-  Serial.print("Ku=");
-  Serial.print(Ku);
-  Serial.print("\n");
-  Serial.print("Kp=");
-  Serial.print(Kp);
-  Serial.print("\n");
-  Serial.print("Ki=");
-  Serial.print(Ki);
-  Serial.print("\n");
-  Serial.print("Kd=");
-  Serial.print(Kd);
-  Serial.print("\n");
-  delay(5000);
-  temp_2.SetTunings(Kp, Ki, Kd);
+  Ki = 10*1.2*Ku/Pu;
+  Kd = 0.0000075*Ku*Pu;  
+    lcd.setCursor(4,2);
+  if (Kp < 10) {
+    lcd.print("  ");
+    lcd.print((int)Kp);
+  }
+  else if (Kp < 100) {
+    lcd.print(" ");
+    lcd.print((int)Kp);
+  }
+  else if (Kp < 1000)
+    lcd.print((int)Kp);
+  else
+    lcd.print((int)Kp);
+  
+  lcd.setCursor(11,2);
+  if (Kd < 10) {
+    lcd.print("  ");
+    lcd.print((int)Kd);
+  }
+  else if (Kd < 100) {
+    lcd.print(" ");
+    lcd.print((int)Kd);
+  }
+  else if (Kd < 1000)
+    lcd.print((int)Kd);
+  else
+    lcd.print((int)Kd);
+    
+  lcd.setCursor(18,2);
+  if (Ki < 10) {
+    lcd.print("  ");
+    lcd.print((int)Ki);
+  }
+  else if (Ki < 100) {
+    lcd.print(" ");
+    lcd.print((int)Ki);
+  }
+  else if (Ki < 1000)
+    lcd.print((int)Ki);
+  else
+    lcd.print((int)Ki);
+  delay(30000);
+  temp_2.SetTunings(Kp, Ki, Kd);*/
 }
 
 ISR(TIMER3_COMPA_vect) {
@@ -472,6 +522,9 @@ ISR(TIMER3_COMPA_vect) {
 }
 
 bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
+  Serial.print("LOOP ");
+  Serial.print(flag_temp);
+  Serial.print("\n");
   if (flag_temp == 1) {
     if (temp_update >= 2500) {
       updateTemperatureTune(id, input_1);
@@ -520,6 +573,7 @@ bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
       abs_min = input_1;
       abs_min_time_2 = millis();
     }
+    flag_temp = 0;
   }
   return false;
 }
@@ -527,8 +581,9 @@ bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 
 void setup() {
   Serial.begin(9600);
-  setupLCD();
+  setupLCDTune();
   setupTemp();
+  setupLCD();
   setupMotorInit();
   setupMotorTimer();
   setupEncoder();
@@ -585,18 +640,6 @@ void loop() {
     else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
 
     if (temp_update >= 2500 && !safety_stop) {
-      /*Serial.print("input_1=");
-      Serial.print(input_1);
-      Serial.print("\n");
-      Serial.print("output_1=");
-      Serial.print(output_1);
-      Serial.print("\n");
-      Serial.print("input_2=");
-      Serial.print(input_2);
-      Serial.print("\n");
-      Serial.print("output_2=");
-      Serial.print(output_2);
-      Serial.print("\n");*/
       updateTemperature();
       temp_update = 0;
     }
