@@ -76,13 +76,13 @@ int encoder_click_status_old = HIGH;
 
 double Kd = 200;
 double Kp = 50;
-double Ki = 0.1;
+double Ki = 0.001;
 double set_point_1 = 0; 
 double input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
 double Kd2 = 200;
 double Kp2 = 50;
-double Ki2 = 0.1;
+double Ki2 = 1;
 double set_point_2 = 0; 
 double input_2, output_2;
 PID temp_2(&input_2, &output_2, &set_point_2, Kp2, Ki2, Kd2, DIRECT);
@@ -423,8 +423,8 @@ void setupTemp() {
   set_point_1 = 25;
   set_point_2 = 25;
 
-  temp_1.SetOutputLimits(0, window_size);
-  temp_2.SetOutputLimits(0, window_size);
+  temp_1.SetOutputLimits(0, window_size/2);
+  temp_2.SetOutputLimits(0, window_size/2);
 
   temp_1.SetMode(AUTOMATIC);
   temp_2.SetMode(AUTOMATIC);
