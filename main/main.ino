@@ -74,9 +74,9 @@ int encoder_turn_status = LOW;
 int encoder_click_status = HIGH;
 int encoder_click_status_old = HIGH; 
 
-int Kd = 200;
-int Kp = 2;
-int Ki = 1;
+double Kd = 200;
+double Kp = 2;
+double Ki = 1;
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kd, Kp, Ki, DIRECT);
 double set_point_2, input_2, output_2;
@@ -212,6 +212,41 @@ void click() {
     menu_level--;
   }
   updateScreen();
+}
+void rightTune() {
+  if (init_tuning == 0) {
+    Kp++;
+    temp_1.setTuning(Kp,0,0);
+    lcd.setCursor(0,16)
+    lcd.print(Kp);
+  }
+  if (init_tuning == 7) {
+    Kp++;
+    temp_2.setTuning(Kp,0,0);
+    lcd.setCursor(0,16)
+    lcd.print(Kp);
+  }
+}
+
+void leftTune() {
+  if (init_tuning == 0) {
+    Kp--;
+    temp_1.setTuning(Kp,0,0);
+    lcd.setCursor(0,17)
+    lcd.print(Kp);
+  }
+  if (init_tuning == 7) {
+    Kp--;
+    temp_2.setTuning(Kp,0,0);
+    lcd.setCursor(0,16)
+    lcd.print(Kp);
+  }
+}
+
+void clickTune() {
+  if (init_tuning == 0 || init_tunning == 7) {
+    init_tuning++;
+  }
 }
 
 void updateValue() {
@@ -454,7 +489,7 @@ void setupTemp() {
   lcd.setCursor(0,2);
   lcd.print("Kp=    Kd=    Ki=    ");*/
 
-  abs_max = 0;
+  abs_max = 100;
   abs_min = 100;
   abs_max_time_1 = 0;
   abs_min_time_1 = 0;
@@ -513,6 +548,7 @@ void setupTemp() {
     lcd.print((int)Ki);
   delay(30000);
   temp_2.SetTunings(Kp, Ki, Kd);*/
+  autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 0)
 }
 
 ISR(TIMER3_COMPA_vect) {
@@ -522,6 +558,7 @@ ISR(TIMER3_COMPA_vect) {
 }
 
 bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
+  /*
   Serial.print("LOOP ");
   Serial.print(flag_temp);
   Serial.print("\n");
@@ -576,17 +613,249 @@ bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
     flag_temp = 0;
   }
   return false;
+  */
+  lcd.setCursor(0,0);
+  lcd.print("Kp=");
+  lcd.setCursor(1,0);
+  lcd.print("Kd=");
+  lcd.setCursor(2,0);
+  lcd.print("Ki=");
+  temp_1.setTuning(0,0,0);
+  temp_2.setTuning(0,0,0);
+  set_point_1 = 100;
+  set_point_2 = 100;
+  while(1) {
+    if (flag_left == 1) {
+      leftTune();
+      flag_left = 0;
+    }
+    if (flag_right == 1) {
+      rightTune();
+      flag_right = 0;
+    }
+    if (flag_click == 1) {
+      clickTune();
+      flag_click = 0;
+    }
+    
+    if (flag_temp == 1 && init_tuning < 7) {
+      input_1 = analogRead(TEMP_INPUT_PIN_1);
+      input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+      input_2 = analogRead(TEMP_INPUT_PIN_2);
+      input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+      temp_1.Compute();
+
+      if ((init_tuning == 1 || init_tunning == 3 || init_tuning == 5) && input_1 > 100) {
+        init_tuning++;
+        abs_max = 100;
+      }
+      if (init_tuning == 2 && input_1 > abs_max) {
+        abs_max = input_1;
+        abs_max_time_1 = millis();
+      }
+      if ((init_tuning == 2 || init_tunning == 4) && input_1 < 100) {
+        init_tuning++;
+        abs_min = 100;
+      }
+      if (init_tunning == 3 && input_1 < abs_min) {
+        abs_min = input_1;
+        abs_min_time_1 = millis();
+      }
+      if (init_tuning == 4 && input_1 > abs_max) {
+        abs_max = input_1;
+        abs_max_time_2 = millis();
+      }
+      if (init_tunning == 5 && input_1 < abs_min) {
+        abs_min = input_1;
+        abs_min_time_2 = millis();
+      }   
+      if (init_tunning == 6) {
+        Kp =  0.6*Kp;
+        double Pu = ((abs_max_time_2 - abs_max_time_1)+(abs_min_time_2-abs_min_time_1))/2;
+        Ki = 2*Kp/Pu;
+        Kd = Kp*Pu/8;
+        temp_1.setTuning(Kp, Ki, Kd);
+        Kp = 0;
+        Ki = 0;
+        Kd = 0;
+        abs_max = 100;
+        abs_min = 100;
+        lcd.setCursor(0,13);
+        lcd.print(Kp);
+        lcd.setCursor(1,13);
+        lcd.print(Kd);
+        lcd.setcursor(2,13);
+        lcd.print(Ki);
+        delay(10000);
+        set_point_1 = 0;
+        digitalWrite(TEMP_OUTPUT_PIN_1, LOW)
+        init_tuning++;
+      }
+    
+      unsigned long now = millis();
+      if (now - window_start_time > window_size) {
+        window_start_time += window_size;
+      }   
+  
+      ////////////////AUTOMATIC SAFETY/////////////////////////
+      if (input_1 > 430 || input_2 > 430 || safety_stop) {
+        output_1 = 0;
+        output_2 = 0;
+        if (!safety_stop) {
+          digitalWrite(BUZZER, HIGH);
+          initSafety();
+          safety_stop = true;
+        }
+      }
+      if (input_1 < 50 && input_2 < 50 && safety_stop) {
+        digitalWrite(BUZZER, LOW);
+        setupLCD();
+        safety_stop = false;
+      }
+      ///////////////////////////////////////////////////////////
+      
+      if (output_1 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_1, HIGH);
+      else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
+  
+      if (temp_update >= 2500 && !safety_stop) {
+        updateTemperature();
+        temp_update = 0;
+      }
+  
+      if (buzzer_update >= 2500 && !safety_stop) {
+        if (input_1 > set_point_1 + 20) {
+          digitalWrite(BUZZER, LOW); //digitalWrite(BUZZER, !digitalRead(BUZZER));
+        }
+        else {
+          digitalWrite(BUZZER, LOW);
+        }
+        buzzer_update = 0;
+      }
+          
+      else if(temp_update >= 1000 && safety_stop) {
+        updateSafety();
+        temp_update = 0;
+      }
+      
+      flag_temp = 0;
+    }
+
+    if (flag_temp == 1 && init_tuning > 6) {
+      input_1 = analogRead(TEMP_INPUT_PIN_1);
+      input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+      input_2 = analogRead(TEMP_INPUT_PIN_2);
+      input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+      temp_2.Compute();
+
+      if ((init_tuning == 8 || init_tunning == 10 || init_tuning == 12) && input_2 > 100) {
+        init_tuning++;
+        abs_max = 100;
+      }
+      if (init_tuning == 9 && input_2 > abs_max) {
+        abs_max = input_2;
+        abs_max_time_1 = millis();
+      }
+      if ((init_tuning == 9 || init_tunning == 11) && input_2 < 100) {
+        init_tuning++;
+        abs_min = 100;
+      }
+      if (init_tunning == 10 && input_2 < abs_min) {
+        abs_min = input_2;
+        abs_min_time_1 = millis();
+      }
+      if (init_tuning == 11 && input_2 > abs_max) {
+        abs_max = input_2;
+        abs_max_time_2 = millis();
+      }
+      if (init_tunning == 12 && input_2 < abs_min) {
+        abs_min = input_2;
+        abs_min_time_2 = millis();
+      }   
+      if (init_tunning == 13) {
+        Kp =  0.6*Kp;
+        double Pu = ((abs_max_time_2 - abs_max_time_1)+(abs_min_time_2 - abs_min_time_1))/2;
+        Ki = 2*Kp/Pu;
+        Kd = Kp*Pu/8;
+        temp_2.setTuning(Kp, Ki, Kd);
+        Kp = 0;
+        Ki = 0;
+        Kd = 0;
+        abs_max = 100;
+        abs_min = 100;
+        lcd.setCursor(0,13);
+        lcd.print(Kp);
+        lcd.setCursor(1,13);
+        lcd.print(Kd);
+        lcd.setCursor(2,13);
+        lcd.print(Ki);
+        delay(10000);
+        set_point_2 = 0;
+        digitalWrite(TEMP_OUTPUT_PIN_2, LOW)
+        init_tuning++;
+      }
+      if (init_tuning == 14) {
+        return true;
+      }
+    
+      unsigned long now = millis();
+      if (now - window_start_time > window_size) {
+        window_start_time += window_size;
+      }   
+  
+      ////////////////AUTOMATIC SAFETY/////////////////////////
+      if (input_1 > 430 || input_2 > 430 || safety_stop) {
+        output_1 = 0;
+        output_2 = 0;
+        if (!safety_stop) {
+          digitalWrite(BUZZER, HIGH);
+          initSafety();
+          safety_stop = true;
+        }
+      }
+      if (input_1 < 50 && input_2 < 50 && safety_stop) {
+        digitalWrite(BUZZER, LOW);
+        setupLCD();
+        safety_stop = false;
+      }
+      ///////////////////////////////////////////////////////////
+      
+      if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
+      else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+  
+      if (temp_update >= 2500 && !safety_stop) {
+        updateTemperature();
+        temp_update = 0;
+      }
+  
+      if (buzzer_update >= 2500 && !safety_stop) {
+        if (input_2 > set_point_2 + 20) {
+          digitalWrite(BUZZER, LOW); //digitalWrite(BUZZER, !digitalRead(BUZZER));
+        }
+        else {
+          digitalWrite(BUZZER, LOW);
+        }
+        buzzer_update = 0;
+      }
+          
+      else if(temp_update >= 1000 && safety_stop) {
+        updateSafety();
+        temp_update = 0;
+      }
+      
+      flag_temp = 0;
+    }
+  }
 }
 //////////////////////////////////////////////
 
 void setup() {
   Serial.begin(9600);
   setupLCDTune();
+  setupEncoder();f
   setupTemp();
   setupLCD();
   setupMotorInit();
   setupMotorTimer();
-  setupEncoder();
 }
 
 void loop() {
