@@ -80,9 +80,12 @@ double Ki = 0.1;
 double set_point_1 = 100; 
 double input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
+double Kd2 = 250;
+double Kp2 = 10;
+double Ki2 = 0.01;
 double set_point_2 = 50; 
 double input_2, output_2;
-PID temp_2(&input_2, &output_2, &set_point_2, Kp, Ki, Kd, DIRECT);
+PID temp_2(&input_2, &output_2, &set_point_2, Kp2, Ki2, Kd2, DIRECT);
 int window_size = 5000;
 unsigned long window_start_time;
 
