@@ -74,18 +74,22 @@ int encoder_turn_status = LOW;
 int encoder_click_status = HIGH;
 int encoder_click_status_old = HIGH; 
 
-double Kd = 200;
-double Kp = 50;
-double Ki = 0.001;
-double set_point_1 = 0; 
-double input_1, output_1;
+/*
+ * Ku=250
+ * Tu=42
+ * Ti=22.4
+ * Td=14
+ * Ki=11.9
+ * Kd=140
+ * Kp=50
+ */
+double Kd = 50;         
+double Kp = 25;         
+double Ki = 0.01;       
+double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
-double Kd2 = 200;
-double Kp2 = 50;
-double Ki2 = 1;
-double set_point_2 = 0; 
-double input_2, output_2;
-PID temp_2(&input_2, &output_2, &set_point_2, Kp2, Ki2, Kd2, DIRECT);
+double set_point_2, input_2, output_2;
+PID temp_2(&input_2, &output_2, &set_point_2, Kp, Ki, Kd, DIRECT);
 int window_size = 5000;
 unsigned long window_start_time;
 
@@ -219,39 +223,49 @@ void click() {
   updateScreen();
 }
 void rightTune() {
-  if (init_tuning == 0) {
+  if (init_tuning == 0 || init_tuning == 3) {
     Kp++;
     temp_1.SetTunings(Kp,0,0);
     lcd.setCursor(13,0);
     lcd.print(Kp);
   }
-  if (init_tuning == 7) {
-    Kp++;
-    temp_2.SetTunings(Kp,0,0);
-    lcd.setCursor(13,0);
-    lcd.print(Kp);
+  if (init_tuning == 1 || init_tuning == 4) {
+    Ki+=0.01;
+    temp_2.SetTunings(Kp,Ki,0);
+    lcd.setCursor(13,1);
+    lcd.print(Ki);
+  }
+  if (init_tuning == 2 || init_tuning == 5) {
+    Kd++;
+    temp_2.SetTunings(Kp,Ki,Kd);
+    lcd.setCursor(13,2);
+    lcd.print(Kd);
   }
 }
 
 void leftTune() {
-  if (init_tuning == 0) {
+  if (init_tuning == 0 || init_tuning == 3) {
     Kp--;
     temp_1.SetTunings(Kp,0,0);
     lcd.setCursor(13,0);
     lcd.print(Kp);
   }
-  if (init_tuning == 7) {
-    Kp--;
-    temp_2.SetTunings(Kp,0,0);
-    lcd.setCursor(13,0);
-    lcd.print(Kp);
+  if (init_tuning == 1 || init_tuning == 4) {
+    Ki-=0.01;
+    temp_2.SetTunings(Kp,Ki,0);
+    lcd.setCursor(13,1);
+    lcd.print(Ki);
+  }
+  if (init_tuning == 2 || init_tuning == 5) {
+    Kd--;
+    temp_2.SetTunings(Kp,Ki,Kd);
+    lcd.setCursor(13,2);
+    lcd.print(Kd);
   }
 }
 
 void clickTune() {
-  if (init_tuning == 0 || init_tuning == 7) {
     init_tuning++;
-  }
 }
 
 void updateValue() {
@@ -423,8 +437,8 @@ void setupTemp() {
   set_point_1 = 25;
   set_point_2 = 25;
 
-  temp_1.SetOutputLimits(0, window_size/2);
-  temp_2.SetOutputLimits(0, window_size/2);
+  temp_1.SetOutputLimits(0, window_size);
+  temp_2.SetOutputLimits(0, window_size);
 
   temp_1.SetMode(AUTOMATIC);
   temp_2.SetMode(AUTOMATIC);
@@ -553,12 +567,178 @@ void setupTemp() {
     lcd.print((int)Ki);
   delay(30000);
   temp_2.SetTunings(Kp, Ki, Kd);*/
+  //tunePID();
 }
 
 ISR(TIMER3_COMPA_vect) {
   flag_temp = 1;
   temp_update++;
   buzzer_update++;
+}
+
+bool tunePID() {
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Kp=");
+  lcd.setCursor(0,1);
+  lcd.print("Ki=");
+  lcd.setCursor(0,2);
+  lcd.print("Kd=");
+  lcd.setCursor(0,3);
+  lcd.print("CURRENT TEMPERATURE: ");
+  set_point_1 = 100;
+  Kp = 0;
+  Ki = 0;
+  Kd = 0;
+  init_tuning = 0;
+  while(init_tuning < 3) {
+    if (flag_left == 1) {
+      leftTune();
+      flag_left = 0;
+    }
+    if (flag_right == 1) {
+      rightTune();
+      flag_right = 0;
+    }
+    if (flag_click == 1) {
+      clickTune();
+      flag_click = 0;
+    }
+  
+    if (flag_temp == 1) {
+      input_1 = analogRead(TEMP_INPUT_PIN_1);
+      input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+      temp_1.Compute();
+    
+      unsigned long now = millis();
+      if (now - window_start_time > window_size) {
+        window_start_time += window_size;
+      }   
+  
+      ////////////////AUTOMATIC SAFETY/////////////////////////
+      if (input_1 > 450 || input_2 > 450 || safety_stop) {
+        output_1 = 0;
+        output_2 = 0;
+        if (!safety_stop) {
+          digitalWrite(BUZZER, HIGH);
+          initSafety();
+          safety_stop = true;
+        }
+      }
+      if (input_1 < 50 && input_2 < 50 && safety_stop) {
+        digitalWrite(BUZZER, LOW);
+        setupLCD();
+        safety_stop = false;
+      }
+      ///////////////////////////////////////////////////////////
+      if (output_1 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_1, HIGH);
+      else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
+  
+      if (temp_update >= 2500 && !safety_stop) {
+        updateTemperature();
+        Serial.println(input_1);
+        temp_update = 0;
+      }
+  
+      if (buzzer_update >= 2500 && !safety_stop) {
+        if (input_1 > set_point_1 + 20) {
+          digitalWrite(BUZZER, !digitalRead(BUZZER));
+        }
+        else {
+          digitalWrite(BUZZER, LOW);
+        }
+        buzzer_update = 0;
+      }
+          
+      else if(temp_update >= 1000 && safety_stop) {
+        updateSafety();
+        temp_update = 0;
+      }
+      
+      flag_temp = 0;
+    }
+  }
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Kp=");
+  lcd.setCursor(0,1);
+  lcd.print("Ki=");
+  lcd.setCursor(0,2);
+  lcd.print("Kd=");
+  lcd.setCursor(0,3);
+  lcd.print("CURRENT TEMPERATURE: ");
+  set_point_2 = 100;
+  Kp = 0;
+  Ki = 0;
+  Kd = 0;
+  while(init_tuning < 6) {
+    if (flag_left == 1) {
+      leftTune();
+      flag_left = 0;
+    }
+    if (flag_right == 1) {
+      rightTune();
+      flag_right = 0;
+    }
+    if (flag_click == 1) {
+      clickTune();
+      flag_click = 0;
+    }
+  
+    if (flag_temp == 1) {
+      input_2 = analogRead(TEMP_INPUT_PIN_2);
+      input_2 = ((input_1*5.0/1024.0)-1.25)/0.005;
+      temp_2.Compute();
+    
+      unsigned long now = millis();
+      if (now - window_start_time > window_size) {
+        window_start_time += window_size;
+      }   
+  
+      ////////////////AUTOMATIC SAFETY/////////////////////////
+      if (input_1 > 450 || input_2 > 450 || safety_stop) {
+        output_1 = 0;
+        output_2 = 0;
+        if (!safety_stop) {
+          digitalWrite(BUZZER, HIGH);
+          initSafety();
+          safety_stop = true;
+        }
+      }
+      if (input_1 < 50 && input_2 < 50 && safety_stop) {
+        digitalWrite(BUZZER, LOW);
+        setupLCD();
+        safety_stop = false;
+      }
+      ///////////////////////////////////////////////////////////
+      if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
+      else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+  
+      if (temp_update >= 2500 && !safety_stop) {
+        updateTemperature();
+        Serial.println(input_1);
+        temp_update = 0;
+      }
+  
+      if (buzzer_update >= 2500 && !safety_stop) {
+        if (input_2 > set_point_2 + 20) {
+          digitalWrite(BUZZER, !digitalRead(BUZZER));
+        }
+        else {
+          digitalWrite(BUZZER, LOW);
+        }
+        buzzer_update = 0;
+      }
+          
+      else if(temp_update >= 1000 && safety_stop) {
+        updateSafety();
+        temp_update = 0;
+      }
+      
+      flag_temp = 0;
+    }
+  }
 }
 
 bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
@@ -681,6 +861,9 @@ void loop() {
 
     if (temp_update >= 2500 && !safety_stop) {
       updateTemperature();
+      Serial.print(input_1);
+      Serial.print(" ");
+      Serial.println(input_2);
       temp_update = 0;
     }
 
