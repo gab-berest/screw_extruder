@@ -1,6 +1,8 @@
 #include <AccelStepper.h>
 #include <LiquidCrystal.h>
 #include <PID_v1.h>
+#include <SPI.h>
+#include <SD.h>
 
 #define TUNE_PIN           0
 
@@ -31,6 +33,10 @@
 #define BUZZER             37
 
 #define SDCARDDETECT       49
+#define SDCARDCS           53
+#define SDCARDMOSI         49
+#define SDCARDMISO         50
+#define SDCARDSCK          52
 
 #define LED_PIN            13
 
@@ -105,6 +111,8 @@ int init_tuning = 0;
 
 bool safety_stop = false;
 
+File database_file;
+File log_file;
 
 ///////////////////////////////////
 // MOTOR CONTROL
@@ -141,6 +149,20 @@ ISR(TIMER1_COMPA_vect) {
   motor.runSpeed();
 }
 //////////////////////////////////////////////
+
+//////////////////////////////////////////////
+// SD Card Module
+//////////////////////////////////////////////
+void setupSD() {
+  SD.begin(SDCARDCS);
+  database_file = SD.open("database.json", FILE_WRITE);
+  database_file.print("{\"Kp\": 25, \"Ki\": 0.01, \"Kd\": 50}");
+  database_file.close();
+  log_file = SD.open("log.txt", FILE_WRITE);
+  log_file.println("Begin logging...");
+  log_file.close();
+}
+/////////////////////////////////////////////
 
 //////////////////////////////////////////////
 // LCD CONTROL
@@ -808,6 +830,7 @@ bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 
 void setup() {
   Serial.begin(9600);
+  setupSD();
   setupLCDTune();
   setupEncoder();
   setupTemp();
