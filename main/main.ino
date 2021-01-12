@@ -2,6 +2,8 @@
 #include <LiquidCrystal.h>
 #include <PID_v1.h>
 
+#define TUNE_PIN           0
+
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
 #define E_ENABLE_PIN       24
@@ -433,6 +435,8 @@ void setupTemp() {
   pinMode(TEMP_INPUT_PIN_1, INPUT);
   pinMode(TEMP_INPUT_PIN_2, INPUT);
 
+  pinMode(TUNE_PIN, INPUT_PULLUP);
+
   window_start_time = millis();
   set_point_1 = 25;
   set_point_2 = 25;
@@ -453,121 +457,123 @@ void setupTemp() {
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
 
-  /*double D, A, Pu, Ku;
-  while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1));
-  D = 120/2;
-  A = abs_max - abs_min;
-  Pu = abs_max_time_2 - abs_max_time_1;
-  Ku = 4*D/(3.14159*A);
-  Kp = 50*0.6*Ku;
-  Ki = 100*1.2*Ku/Pu;
-  Kd = 0.01*0.075*Ku*Pu;
-  lcd.setCursor(3,2);
-  if (Kp < 10) {
-    lcd.print("  "); 
-    lcd.print((int)Kp);
-  }
-  else if (Kp < 100) {
-    lcd.print(" ");
-    lcd.print((int)Kp);
-  }
-  else if (Kp < 1000)
-    lcd.print((int)Kp);
-  else
-    lcd.print((int)Kp);
-  
-  lcd.setCursor(10,2);
-  if (Kd < 10) {
-    lcd.print("  ");
-    lcd.print((int)Kd);
-  }
-  else if (Kd < 100) {
-    lcd.print(" ");
-    lcd.print((int)Kd);
-  }
-  else if (Kd < 1000)
-    lcd.print((int)Kd);
-  else
-    lcd.print((int)Kd);
+  if(digitalRead(TUNE_PIN) == LOW) {
+    /*double D, A, Pu, Ku;
+    while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1));
+    D = 120/2;
+    A = abs_max - abs_min;
+    Pu = abs_max_time_2 - abs_max_time_1;
+    Ku = 4*D/(3.14159*A);
+    Kp = 50*0.6*Ku;
+    Ki = 100*1.2*Ku/Pu;
+    Kd = 0.01*0.075*Ku*Pu;
+    lcd.setCursor(3,2);
+    if (Kp < 10) {
+      lcd.print("  "); 
+      lcd.print((int)Kp);
+    }
+    else if (Kp < 100) {
+      lcd.print(" ");
+      lcd.print((int)Kp);
+    }
+    else if (Kp < 1000)
+      lcd.print((int)Kp);
+    else
+      lcd.print((int)Kp);
     
-  lcd.setCursor(17,2);
-  if (Ki < 10) {
-    lcd.print("  ");
-    lcd.print((int)Ki);
-  }
-  else if (Ki < 100) {
-    lcd.print(" ");
-    lcd.print((int)Ki);
-  }
-  else if (Ki < 1000)
-    lcd.print((int)Ki);
-  else
-    lcd.print((int)Ki);
-  delay(30000);
-  temp_1.SetTunings(Kp, Ki, Kd);
-  lcd.setCursor(0,2);
-  lcd.print("Kp=    Kd=    Ki=    ");
-
-  abs_max = 100;
-  abs_min = 100;
-  abs_max_time_1 = 0;
-  abs_min_time_1 = 0;
-  abs_max_time_2 = 0;
-  abs_min_time_2 = 0;
-  init_tuning = 0;
-
-  while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 2));
-  D = 120/2;
-  A = abs_max - abs_min;
-  Pu = abs_min_time_2 - abs_min_time_1;
-  Ku = 4*D/(3.14159*A);
-  Kp = 50*0.6*Ku;
-  Ki = 100*1.2*Ku/Pu; //284
-  Kd = 0.00025*0.075*Ku*Pu;  //0
-    lcd.setCursor(4,2);
-  if (Kp < 10) {
-    lcd.print("  ");
-    lcd.print((int)Kp);
-  }
-  else if (Kp < 100) {
-    lcd.print(" ");
-    lcd.print((int)Kp);
-  }
-  else if (Kp < 1000)
-    lcd.print((int)Kp);
-  else
-    lcd.print((int)Kp);
+    lcd.setCursor(10,2);
+    if (Kd < 10) {
+      lcd.print("  ");
+      lcd.print((int)Kd);
+    }
+    else if (Kd < 100) {
+      lcd.print(" ");
+      lcd.print((int)Kd);
+    }
+    else if (Kd < 1000)
+      lcd.print((int)Kd);
+    else
+      lcd.print((int)Kd);
+      
+    lcd.setCursor(17,2);
+    if (Ki < 10) {
+      lcd.print("  ");
+      lcd.print((int)Ki);
+    }
+    else if (Ki < 100) {
+      lcd.print(" ");
+      lcd.print((int)Ki);
+    }
+    else if (Ki < 1000)
+      lcd.print((int)Ki);
+    else
+      lcd.print((int)Ki);
+    delay(30000);
+    temp_1.SetTunings(Kp, Ki, Kd);
+    lcd.setCursor(0,2);
+    lcd.print("Kp=    Kd=    Ki=    ");
   
-  lcd.setCursor(11,2);
-  if (Kd < 10) {
-    lcd.print("  ");
-    lcd.print((int)Kd);
-  }
-  else if (Kd < 100) {
-    lcd.print(" ");
-    lcd.print((int)Kd);
-  }
-  else if (Kd < 1000)
-    lcd.print((int)Kd);
-  else
-    lcd.print((int)Kd);
+    abs_max = 100;
+    abs_min = 100;
+    abs_max_time_1 = 0;
+    abs_min_time_1 = 0;
+    abs_max_time_2 = 0;
+    abs_min_time_2 = 0;
+    init_tuning = 0;
+  
+    while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 2));
+    D = 120/2;
+    A = abs_max - abs_min;
+    Pu = abs_min_time_2 - abs_min_time_1;
+    Ku = 4*D/(3.14159*A);
+    Kp = 50*0.6*Ku;
+    Ki = 100*1.2*Ku/Pu; //284
+    Kd = 0.00025*0.075*Ku*Pu;  //0
+      lcd.setCursor(4,2);
+    if (Kp < 10) {
+      lcd.print("  ");
+      lcd.print((int)Kp);
+    }
+    else if (Kp < 100) {
+      lcd.print(" ");
+      lcd.print((int)Kp);
+    }
+    else if (Kp < 1000)
+      lcd.print((int)Kp);
+    else
+      lcd.print((int)Kp);
     
-  lcd.setCursor(18,2);
-  if (Ki < 10) {
-    lcd.print("  ");
-    lcd.print((int)Ki);
+    lcd.setCursor(11,2);
+    if (Kd < 10) {
+      lcd.print("  ");
+      lcd.print((int)Kd);
+    }
+    else if (Kd < 100) {
+      lcd.print(" ");
+      lcd.print((int)Kd);
+    }
+    else if (Kd < 1000)
+      lcd.print((int)Kd);
+    else
+      lcd.print((int)Kd);
+      
+    lcd.setCursor(18,2);
+    if (Ki < 10) {
+      lcd.print("  ");
+      lcd.print((int)Ki);
+    }
+    else if (Ki < 100) {
+      lcd.print(" ");
+      lcd.print((int)Ki);
+    }
+    else if (Ki < 1000)
+      lcd.print((int)Ki);
+    else
+      lcd.print((int)Ki);
+    delay(30000);
+    temp_2.SetTunings(Kp, Ki, Kd);*/
+    tunePID();
   }
-  else if (Ki < 100) {
-    lcd.print(" ");
-    lcd.print((int)Ki);
-  }
-  else if (Ki < 1000)
-    lcd.print((int)Ki);
-  else
-    lcd.print((int)Ki);
-  delay(30000);
-  temp_2.SetTunings(Kp, Ki, Kd);*/
-  //tunePID();
 }
 
 ISR(TIMER3_COMPA_vect) {
