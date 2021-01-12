@@ -3,6 +3,7 @@
 #include <PID_v1.h>
 #include <SPI.h>
 #include <SD.h>
+#include <ArduinoJson.h>
 
 #define TUNE_PIN           0
 
@@ -155,12 +156,29 @@ ISR(TIMER1_COMPA_vect) {
 //////////////////////////////////////////////
 void setupSD() {
   SD.begin(SDCARDCS);
+  SD.remove("database.json");
   database_file = SD.open("database.json", FILE_WRITE);
-  database_file.print("{\"Kp\": 25, \"Ki\": 0.01, \"Kd\": 50}");
+  StaticJsonDocument<256> indoc;
+  indoc["Kp"] = Kp;
+  indoc["Kd"] = Kd;
+  indoc["Ki"] = Ki;
+  serializeJson(indoc, database_file);
   database_file.close();
+  
   log_file = SD.open("log.txt", FILE_WRITE);
   log_file.println("Begin logging...");
   log_file.close();
+
+  database_file = SD.open("database.json", FILE_READ);
+  StaticJsonDocument<512> outdoc;
+  deserializeJson(outdoc, database_file);
+  double tmp = outdoc["Kp"];
+  Serial.println(tmp);
+  tmp = outdoc["Ki"];
+  Serial.println(tmp);
+  tmp = outdoc["Kd"];
+  Serial.println(tmp);
+  database_file.close();
 }
 /////////////////////////////////////////////
 
