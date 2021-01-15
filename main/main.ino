@@ -93,8 +93,8 @@ int encoder_click_status_old = HIGH;
  * Kp=50
  */
 double Kd = 50;         
-double Kp = 25;         
-double Ki = 0.01;       
+double Kp = 30;         
+double Ki = 0.05;       
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
 double set_point_2, input_2, output_2;
@@ -155,30 +155,55 @@ ISR(TIMER1_COMPA_vect) {
 // SD Card Module
 //////////////////////////////////////////////
 void setupSD() {
+  pinMode(TUNE_PIN, INPUT_PULLUP);
+  
   SD.begin(SDCARDCS);
-  SD.remove("database.json");
-  database_file = SD.open("database.json", FILE_WRITE);
+  if (digitalRead(TUNE_PIN) == HIGH) {
+    readConfig();
+  }
+  
+  log_file = SD.open("log.txt", FILE_WRITE);
+  log_file.println("Begin logging...");
+  
+}
+
+void readConfig() {
+  database_file = SD.open("database.txt", FILE_READ);
+  if (!database_file) {
+    Serial.println(F("Failed to create file"));
+    return;
+  }
+  StaticJsonDocument<512> outdoc;
+  deserializeJson(outdoc, database_file);
+  Kp = outdoc["Kp"];
+  Ki = outdoc["Ki"];
+  Kd = outdoc["Kd"];
+  database_file.close();
+}
+
+void saveConfig(double Kp, double Ki, double Kd) {
+  SD.remove("database.txt");
+  database_file = SD.open("database.txt", FILE_WRITE);
+  if (!database_file) {
+    Serial.println(F("Failed to create file"));
+    return;
+  }
   StaticJsonDocument<256> indoc;
   indoc["Kp"] = Kp;
   indoc["Kd"] = Kd;
   indoc["Ki"] = Ki;
-  serializeJson(indoc, database_file);
+  if (serializeJson(indoc, database_file) == 0) {
+    Serial.println(F("Failed to write to file"));
+  }
   database_file.close();
-  
-  log_file = SD.open("log.txt", FILE_WRITE);
-  log_file.println("Begin logging...");
-  log_file.close();
+}
 
-  database_file = SD.open("database.json", FILE_READ);
-  StaticJsonDocument<512> outdoc;
-  deserializeJson(outdoc, database_file);
-  double tmp = outdoc["Kp"];
-  Serial.println(tmp);
-  tmp = outdoc["Ki"];
-  Serial.println(tmp);
-  tmp = outdoc["Kd"];
-  Serial.println(tmp);
-  database_file.close();
+void logSD(int temp_nozzle, int temp_pre) {
+  log_file.print("Nozzle temp: ");
+  log_file.print(temp_nozzle);
+  log_file.print(" / Preheat temp: ");
+  log_file.println(temp_pre);
+  log_file.flush();
 }
 /////////////////////////////////////////////
 
@@ -475,8 +500,6 @@ void setupTemp() {
   pinMode(TEMP_INPUT_PIN_1, INPUT);
   pinMode(TEMP_INPUT_PIN_2, INPUT);
 
-  pinMode(TUNE_PIN, INPUT_PULLUP);
-
   window_start_time = millis();
   set_point_1 = 25;
   set_point_2 = 25;
@@ -614,6 +637,13 @@ void setupTemp() {
     temp_2.SetTunings(Kp, Ki, Kd);*/
     tunePID();
   }
+  else {
+    temp_1.SetTunings(Kp,Ki,Kd);
+    temp_2.SetTunings(Kp,Ki,Kd);
+    Serial.println(Kp);
+    Serial.println(Ki);
+    Serial.println(Kd);
+  }
 }
 
 ISR(TIMER3_COMPA_vect) {
@@ -704,6 +734,7 @@ bool tunePID() {
       flag_temp = 0;
     }
   }
+  saveConfig(Kp, Ki, Kd);
 
   lcd.clear();
   lcd.setCursor(0,0);
@@ -911,6 +942,7 @@ void loop() {
       Serial.print(input_1);
       Serial.print(" ");
       Serial.println(input_2);
+      logSD(input_1, input_2);
       temp_update = 0;
     }
 
