@@ -5,7 +5,7 @@
 #include <SD.h>
 #include <ArduinoJson.h>
 
-#define TUNE_PIN           0
+#define TUNE_PIN           9
 
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
