@@ -333,6 +333,18 @@ void leftTune() {
 
 void clickTune() {
     init_tuning++;
+    if (init_tuning == 0 || init_tuning == 3) {
+      lcd.setCursor(13,0);
+      lcd.print(Kp);
+    }
+    if (init_tuning == 1 || init_tuning == 4) {
+      lcd.setCursor(13,1);
+      lcd.print(Ki);
+    }
+    if (init_tuning == 2 || init_tuning == 5) {
+      lcd.setCursor(13,2);
+      lcd.print(Kd);
+    }
 }
 
 void updateValue() {
@@ -656,6 +668,8 @@ bool tunePID() {
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("Kp=");
+  lcd.setCursor(13,0);
+  lcd.print(Kp);
   lcd.setCursor(0,1);
   lcd.print("Ki=");
   lcd.setCursor(0,2);
@@ -663,9 +677,6 @@ bool tunePID() {
   lcd.setCursor(0,3);
   lcd.print("CURRENT TEMPERATURE: ");
   set_point_1 = 100;
-  Kp = 0;
-  Ki = 0;
-  Kd = 0;
   init_tuning = 0;
   while(init_tuning < 3) {
     if (flag_left == 1) {
@@ -741,6 +752,8 @@ bool tunePID() {
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("Kp=");
+  lcd.setCursor(13,0);
+  lcd.print(Kp);
   lcd.setCursor(0,1);
   lcd.print("Ki=");
   lcd.setCursor(0,2);
