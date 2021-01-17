@@ -93,7 +93,7 @@ int encoder_click_status_old = HIGH;
  * Kp=50
  */
 double Kd = 50;         
-double Kp = 30;         
+double Kp = 25;         
 double Ki = 0.05;       
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
@@ -712,7 +712,9 @@ bool tunePID() {
   
       if (temp_update >= 2500 && !safety_stop) {
         updateTemperature();
-        Serial.println(input_1);
+        Serial.print(input_1);
+        Serial.print(" ");
+        Serial.println(input_2);
         temp_update = 0;
       }
   
@@ -794,7 +796,9 @@ bool tunePID() {
   
       if (temp_update >= 2500 && !safety_stop) {
         updateTemperature();
-        Serial.println(input_1);
+        Serial.print(input_1);
+        Serial.print(" ");
+        Serial.println(input_2);
         temp_update = 0;
       }
   
