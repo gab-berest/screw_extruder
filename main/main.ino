@@ -5,7 +5,7 @@
 #include <SD.h>
 #include <ArduinoJson.h>
 
-#define TUNE_PIN           9
+#define TUNE_PIN           63
 
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
@@ -35,7 +35,7 @@
 
 #define SDCARDDETECT       49
 #define SDCARDCS           53
-#define SDCARDMOSI         49
+#define SDCARDMOSI         51
 #define SDCARDMISO         50
 #define SDCARDSCK          52
 
@@ -156,21 +156,25 @@ ISR(TIMER1_COMPA_vect) {
 //////////////////////////////////////////////
 void setupSD() {
   pinMode(TUNE_PIN, INPUT_PULLUP);
-  
-  SD.begin(SDCARDCS);
-  if (digitalRead(TUNE_PIN) == HIGH) {
-    readConfig();
+  pinMode(SDCARDCS, OUTPUT);
+  if(!SD.begin(SDCARDCS)) {
+    Serial.println("SD begin error");
   }
+  readConfig();
   
   log_file = SD.open("log.txt", FILE_WRITE);
+  if (!log_file) {
+    Serial.println("Could not open log file");
+  }
   log_file.println("Begin logging...");
   
 }
 
 void readConfig() {
-  database_file = SD.open("database.txt", FILE_READ);
+  database_file.close();
+  database_file = SD.open("conf.txt", FILE_READ);
   if (!database_file) {
-    Serial.println(F("Failed to create file"));
+    Serial.println(F("Failed to create file 1"));
     return;
   }
   StaticJsonDocument<512> outdoc;
@@ -178,14 +182,17 @@ void readConfig() {
   Kp = outdoc["Kp"];
   Ki = outdoc["Ki"];
   Kd = outdoc["Kd"];
+  Serial.println(Kp);
+  Serial.println(Ki);
+  Serial.println(Kd);
   database_file.close();
 }
 
 void saveConfig(double Kp, double Ki, double Kd) {
-  SD.remove("database.txt");
-  database_file = SD.open("database.txt", FILE_WRITE);
+  SD.remove("conf.txt");
+  database_file = SD.open("conf.txt", FILE_WRITE);
   if (!database_file) {
-    Serial.println(F("Failed to create file"));
+    Serial.println(F("Failed to create file 2"));
     return;
   }
   StaticJsonDocument<256> indoc;
@@ -293,17 +300,20 @@ void rightTune() {
   if (init_tuning == 0 || init_tuning == 3) {
     Kp++;
     temp_1.SetTunings(Kp,0,0);
+    temp_2.SetTunings(Kp,0,0);
     lcd.setCursor(13,0);
     lcd.print(Kp);
   }
   if (init_tuning == 1 || init_tuning == 4) {
     Ki+=0.01;
+    temp_1.SetTunings(Kp,Ki,0);
     temp_2.SetTunings(Kp,Ki,0);
     lcd.setCursor(13,1);
     lcd.print(Ki);
   }
   if (init_tuning == 2 || init_tuning == 5) {
     Kd++;
+    temp_1.SetTunings(Kp,Ki,Kd);
     temp_2.SetTunings(Kp,Ki,Kd);
     lcd.setCursor(13,2);
     lcd.print(Kd);
@@ -314,17 +324,20 @@ void leftTune() {
   if (init_tuning == 0 || init_tuning == 3) {
     Kp--;
     temp_1.SetTunings(Kp,0,0);
+    temp_2.SetTunings(Kp,0,0);
     lcd.setCursor(13,0);
     lcd.print(Kp);
   }
   if (init_tuning == 1 || init_tuning == 4) {
     Ki-=0.01;
+    temp_1.SetTunings(Kp,Ki,0);
     temp_2.SetTunings(Kp,Ki,0);
     lcd.setCursor(13,1);
     lcd.print(Ki);
   }
   if (init_tuning == 2 || init_tuning == 5) {
     Kd--;
+    temp_1.SetTunings(Kp,Ki,Kd);
     temp_2.SetTunings(Kp,Ki,Kd);
     lcd.setCursor(13,2);
     lcd.print(Kd);
@@ -396,7 +409,11 @@ void updateTemperature() {
   lcd.setCursor(13, 3);
   lcd.print("   /");
   lcd.setCursor(13, 3);
-  if (input_1 < 10) {
+  if (input_1 <= 0) {
+    lcd.print("  ");
+    lcd.print(0);
+  }
+  else if (input_1 < 10) {
     lcd.print("  ");
     lcd.print((int)input_1);
   }
@@ -412,7 +429,11 @@ void updateTemperature() {
   lcd.setCursor(17, 3);
   lcd.print("   ");
   lcd.setCursor(17, 3);
-  if (input_2 < 10) {
+  if (input_2 <= 0) {
+    lcd.print("  ");
+    lcd.print(0);
+  }
+  else if (input_2 < 10) {
     lcd.print("  ");
     lcd.print((int)input_2);
   }
@@ -665,6 +686,9 @@ ISR(TIMER3_COMPA_vect) {
 }
 
 bool tunePID() {
+  set_point_1 = 100;
+  set_point_2 = 50;
+  init_tuning = 0;
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("Kp=");
@@ -675,9 +699,7 @@ bool tunePID() {
   lcd.setCursor(0,2);
   lcd.print("Kd=");
   lcd.setCursor(0,3);
-  lcd.print("CURRENT TEMPERATURE: ");
-  set_point_1 = 100;
-  init_tuning = 0;
+  lcd.print("CURRENT TEMP: ");
   while(init_tuning < 3) {
     if (flag_left == 1) {
       leftTune();
@@ -695,7 +717,10 @@ bool tunePID() {
     if (flag_temp == 1) {
       input_1 = analogRead(TEMP_INPUT_PIN_1);
       input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+      input_2 = analogRead(TEMP_INPUT_PIN_2);
+      input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
       temp_1.Compute();
+      temp_2.Compute();
     
       unsigned long now = millis();
       if (now - window_start_time > window_size) {
@@ -720,6 +745,8 @@ bool tunePID() {
       ///////////////////////////////////////////////////////////
       if (output_1 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_1, HIGH);
       else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
+      if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
+      else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
   
       if (temp_update >= 2500 && !safety_stop) {
         updateTemperature();
@@ -730,7 +757,7 @@ bool tunePID() {
       }
   
       if (buzzer_update >= 2500 && !safety_stop) {
-        if (input_1 > set_point_1 + 20) {
+        if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20) {
           digitalWrite(BUZZER, !digitalRead(BUZZER));
         }
         else {
@@ -748,91 +775,6 @@ bool tunePID() {
     }
   }
   saveConfig(Kp, Ki, Kd);
-
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("Kp=");
-  lcd.setCursor(13,0);
-  lcd.print(Kp);
-  lcd.setCursor(0,1);
-  lcd.print("Ki=");
-  lcd.setCursor(0,2);
-  lcd.print("Kd=");
-  lcd.setCursor(0,3);
-  lcd.print("CURRENT TEMPERATURE: ");
-  set_point_2 = 100;
-  Kp = 0;
-  Ki = 0;
-  Kd = 0;
-  while(init_tuning < 6) {
-    if (flag_left == 1) {
-      leftTune();
-      flag_left = 0;
-    }
-    if (flag_right == 1) {
-      rightTune();
-      flag_right = 0;
-    }
-    if (flag_click == 1) {
-      clickTune();
-      flag_click = 0;
-    }
-  
-    if (flag_temp == 1) {
-      input_2 = analogRead(TEMP_INPUT_PIN_2);
-      input_2 = ((input_1*5.0/1024.0)-1.25)/0.005;
-      temp_2.Compute();
-    
-      unsigned long now = millis();
-      if (now - window_start_time > window_size) {
-        window_start_time += window_size;
-      }   
-  
-      ////////////////AUTOMATIC SAFETY/////////////////////////
-      if (input_1 > 450 || input_2 > 450 || safety_stop) {
-        output_1 = 0;
-        output_2 = 0;
-        if (!safety_stop) {
-          digitalWrite(BUZZER, HIGH);
-          initSafety();
-          safety_stop = true;
-        }
-      }
-      if (input_1 < 50 && input_2 < 50 && safety_stop) {
-        digitalWrite(BUZZER, LOW);
-        setupLCD();
-        safety_stop = false;
-      }
-      ///////////////////////////////////////////////////////////
-      if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
-      else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
-  
-      if (temp_update >= 2500 && !safety_stop) {
-        updateTemperature();
-        Serial.print(input_1);
-        Serial.print(" ");
-        Serial.println(input_2);
-        temp_update = 0;
-      }
-  
-      if (buzzer_update >= 2500 && !safety_stop) {
-        if (input_2 > set_point_2 + 20) {
-          digitalWrite(BUZZER, !digitalRead(BUZZER));
-        }
-        else {
-          digitalWrite(BUZZER, LOW);
-        }
-        buzzer_update = 0;
-      }
-          
-      else if(temp_update >= 1000 && safety_stop) {
-        updateSafety();
-        temp_update = 0;
-      }
-      
-      flag_temp = 0;
-    }
-  }
 }
 
 bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
