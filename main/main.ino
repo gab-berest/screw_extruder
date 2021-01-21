@@ -24,8 +24,8 @@
 #define LCD_WIDTH          20
 #define LCD_HEIGHT         4
 
-#define MAX_MENU           4
-#define SETTING_MENU       2
+#define MAX_MENU           7
+#define SETTING_MENU       4
 
 #define ENCODER_LEFT_PIN   33
 #define ENCODER_RIGHT_PIN  31    
@@ -72,9 +72,12 @@ int menu_level = 0;
 int menu_old = 0;
 int menu_level_old = 0;
 Menu rpm;
-Menu temperature;
+Menu temperature_nozzle;
 Menu rpm_current;
-Menu temperature_current;
+Menu temperature_current_nozzle;
+Menu temperature_current_preheat;
+Menu temperature_preheat;
+Menu fan_speed;
 Menu* screen[MAX_MENU];
 
 int encoder_pos = 0;                     
@@ -224,29 +227,41 @@ void setupLCD() {
   
   rpm.id = 0;
   rpm.value = 0;
-  strcpy(rpm.label, "RPM: ");
-  temperature.id = 1;
-  temperature.value = 25;
-  strcpy(temperature.label, "TEMP: ");
+  strcpy(rpm.label, "RPM SET: ");
+  temperature_current_nozzle.id = 1;
+  temperature_current_nozzle.value = 0;
+  strcpy(temperature_current_nozzle.label, "NOZZLE TEMP: ");
   rpm_current.id = 2;
   rpm_current.value = rpm_value;
-  strcpy(rpm_current.label, "RPM CURRENT: ");
-  temperature_current.id = 1;
-  temperature_current.value = 0;
-  strcpy(temperature_current.label, "TEMP CURRENT: ");
+  strcpy(rpm_current.label, "RPM: ");
+  temperature_current_preheat.id = 3;
+  temperature_current_preheat.value = 0;
+  strcpy(temperature_current_preheat.label, "PREHEAT TEMP: ");
+  temperature_nozzle.id = 4;
+  temperature_nozzle.value = 25;
+  strcpy(temperature_nozzle.label, "NOZZLE SET TEMP: ");
+  temperature_preheat.id = 5;
+  temperature_preheat.value = 25;
+  strcpy(temperature_preheat.label, "PREHEAT SET TEMP: ");
+  fan_speed.id = 6;
+  fan_speed.value = 0;
+  strcpy(fan_speed.label, "FAN SPEED: ");
 
-  screen[0] = &rpm;
-  screen[1] = &temperature;
-  screen[2] = &rpm_current;
-  screen[3] = &temperature_current;
+  screen[3] = &rpm;
+  screen[4] = &rpm_current;
+  screen[5] = &temperature_current_nozzle;
+  screen[6] = &temperature_current_preheat;
+  screen[0] = &temperature_nozzle;
+  screen[1] = &temperature_preheat;
+  screen[2] = &fan_speed;
   
-  for (int i = 0; i < MAX_MENU; i++) {
-    lcd.setCursor(0, i);
-     if (i == 0)
+  for (int i = 3; i < MAX_MENU; i++) {
+    lcd.setCursor(0, i-3);
+     if (i == 3)
       lcd.print(">");
-     lcd.print(screen[i]->label);
-     lcd.setCursor(17, i);
-     lcd.print(screen[i]->value);
+     lcd.print(screen[i-3]->label);
+     lcd.setCursor(17, i-3);
+     lcd.print(screen[i-3]->value);
   }
 
    menu = 0;
@@ -301,21 +316,21 @@ void rightTune() {
     Kp++;
     temp_1.SetTunings(Kp,0,0);
     temp_2.SetTunings(Kp,0,0);
-    lcd.setCursor(13,0);
+    lcd.setCursor(3,0);
     lcd.print(Kp);
   }
   if (init_tuning == 1 || init_tuning == 4) {
     Ki+=0.01;
     temp_1.SetTunings(Kp,Ki,0);
     temp_2.SetTunings(Kp,Ki,0);
-    lcd.setCursor(13,1);
+    lcd.setCursor(11,0);
     lcd.print(Ki);
   }
   if (init_tuning == 2 || init_tuning == 5) {
     Kd++;
     temp_1.SetTunings(Kp,Ki,Kd);
     temp_2.SetTunings(Kp,Ki,Kd);
-    lcd.setCursor(13,2);
+    lcd.setCursor(3,1);
     lcd.print(Kd);
   }
 }
@@ -325,21 +340,21 @@ void leftTune() {
     Kp--;
     temp_1.SetTunings(Kp,0,0);
     temp_2.SetTunings(Kp,0,0);
-    lcd.setCursor(13,0);
+    lcd.setCursor(3,0);
     lcd.print(Kp);
   }
   if (init_tuning == 1 || init_tuning == 4) {
     Ki-=0.01;
     temp_1.SetTunings(Kp,Ki,0);
     temp_2.SetTunings(Kp,Ki,0);
-    lcd.setCursor(13,1);
+    lcd.setCursor(11,0);
     lcd.print(Ki);
   }
   if (init_tuning == 2 || init_tuning == 5) {
     Kd--;
     temp_1.SetTunings(Kp,Ki,Kd);
     temp_2.SetTunings(Kp,Ki,Kd);
-    lcd.setCursor(13,2);
+    lcd.setCursor(3,1);
     lcd.print(Kd);
   }
 }
@@ -347,31 +362,36 @@ void leftTune() {
 void clickTune() {
     init_tuning++;
     if (init_tuning == 0 || init_tuning == 3) {
-      lcd.setCursor(13,0);
+      lcd.setCursor(3,0);
       lcd.print(Kp);
     }
     if (init_tuning == 1 || init_tuning == 4) {
-      lcd.setCursor(13,1);
+      lcd.setCursor(11,0);
       lcd.print(Ki);
     }
     if (init_tuning == 2 || init_tuning == 5) {
-      lcd.setCursor(13,2);
+      lcd.setCursor(3,1);
       lcd.print(Kd);
     }
 }
 
 void updateValue() {
-  if (menu == 0) {
+  if (menu == 3) {
     rpm_value = rpm.value;
     rpm_current.value = rpm_value;
-    lcd.setCursor(16, 2);
-    lcd.print("    ");
-    lcd.setCursor(17, 2);
+    lcd.setCursor(17, 1);
+    lcd.print("   ");
+    lcd.setCursor(17, 1);
     lcd.print(screen[2]->value);
   }
+  else if (menu == 0) {
+    set_point_1 = temperature_nozzle.value;
+  }
   else if (menu == 1) {
-    set_point_1 = temperature.value;
-    set_point_2 = set_point_1/2;
+    set_point_2 = temperature_preheat.value;
+  }
+  else if (menu == 2) {
+    //Set fan speed
   }
 }
 
@@ -406,9 +426,9 @@ void updateScreen() {
 }
 
 void updateTemperature() {
-  lcd.setCursor(13, 3);
-  lcd.print("   /");
-  lcd.setCursor(13, 3);
+  lcd.setCursor(17, 2);
+  lcd.print("   ");
+  lcd.setCursor(17, 2);
   if (input_1 <= 0) {
     lcd.print("  ");
     lcd.print(0);
@@ -692,14 +712,16 @@ bool tunePID() {
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("Kp=");
-  lcd.setCursor(13,0);
+  lcd.setCursor(3,0);
   lcd.print(Kp);
-  lcd.setCursor(0,1);
+  lcd.setCursor(9,0);
   lcd.print("Ki=");
-  lcd.setCursor(0,2);
+  lcd.setCursor(0,1);
   lcd.print("Kd=");
+  lcd.setCursor(0,2);
+  lcd.print("NOZZLE TEMP:: ");
   lcd.setCursor(0,3);
-  lcd.print("CURRENT TEMP: ");
+  lcd.print("PREHEAT TEMP:: ");
   while(init_tuning < 3) {
     if (flag_left == 1) {
       leftTune();
