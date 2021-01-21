@@ -119,6 +119,12 @@ File database_file;
 File log_file;
 
 ///////////////////////////////////
+// FAN CONTROL
+///////////////////////////////////
+
+//////////////////////////////////
+
+///////////////////////////////////
 // MOTOR CONTROL
 //////////////////////////////////
 void setupMotorTimer() {
@@ -503,6 +509,22 @@ void updateSafety() {
   lcd.setCursor(7,3);
   lcd.print(input_2);
 }
+
+void initTunePID() {
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Kp=");
+  lcd.setCursor(3,0);
+  lcd.print(Kp);
+  lcd.setCursor(9,0);
+  lcd.print("Ki=");
+  lcd.setCursor(0,1);
+  lcd.print("Kd=");
+  lcd.setCursor(0,2);
+  lcd.print("NOZZLE TEMP:: ");
+  lcd.setCursor(0,3);
+  lcd.print("PREHEAT TEMP:: ");
+}
 //////////////////////////////////////////////
 
 //////////////////////////////////////////////
@@ -709,19 +731,7 @@ bool tunePID() {
   set_point_1 = 100;
   set_point_2 = 50;
   init_tuning = 0;
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("Kp=");
-  lcd.setCursor(3,0);
-  lcd.print(Kp);
-  lcd.setCursor(9,0);
-  lcd.print("Ki=");
-  lcd.setCursor(0,1);
-  lcd.print("Kd=");
-  lcd.setCursor(0,2);
-  lcd.print("NOZZLE TEMP:: ");
-  lcd.setCursor(0,3);
-  lcd.print("PREHEAT TEMP:: ");
+  initTunePID();
   while(init_tuning < 3) {
     if (flag_left == 1) {
       leftTune();
