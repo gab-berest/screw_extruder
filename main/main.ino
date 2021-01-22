@@ -792,6 +792,8 @@ bool tunePID() {
     }
   }
   saveConfig(Kp, Ki, Kd);
+  set_point_1 = 25;
+  set_point_2 = 25;
 }
 
 bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
