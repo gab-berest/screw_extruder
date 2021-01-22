@@ -864,8 +864,6 @@ void setup() {
   setupLCD();
   setupMotorInit();
   setupMotorTimer();
-  set_point_1 = 25;
-  set_point_2 = 25;
 }
 
 void loop() {
