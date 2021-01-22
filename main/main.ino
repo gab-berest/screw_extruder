@@ -49,6 +49,11 @@
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
 
+#define FAN_PIN_PWM        -1 //40 //D40
+#define FAN_PIN_TAC        -1 //3 //D3
+#define DEBOUNCE           0
+#define FANSTUCK_THRESHOLD 500
+
 struct Menu {
   int id = 0;
   int value = 0;
@@ -61,6 +66,7 @@ int flag_click = 0;
 int flag_temp = 0;
 int temp_update = 0;
 int buzzer_update = 0;
+int flag_fan = 0;
 
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
 int rpm_old = 0;
@@ -118,9 +124,56 @@ bool safety_stop = false;
 File database_file;
 File log_file;
 
+int fan_speed_value;
+unsigned long volatile ts1=0, ts2=0;
+
 ///////////////////////////////////
 // FAN CONTROL
 ///////////////////////////////////
+void setupFan() {
+  pinMode(FAN_PIN_PWM, OUTPUT);
+  pinMode(FAN_PIN_TAC, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(FAN_PIN_TAC),tachISR,FALLING);
+  
+  noInterrupts();
+  TCCR4A = 0;
+  TCCR4B = 0;
+  TCNT4 = 0;
+  OCR4A = 1;
+  TCCR4B |= (1 << WGM12);
+  TCCR4B |= (1 << CS10) | (1 << CS11);
+  TIMSK4 |= (1 << OCIE4A);
+  interrupts();
+}
+
+ISR(TIMER4_COMPA_vect) {
+  flag_fan++;
+  if (flag_fan >= 10) {
+    flag_fan = 0;
+  }
+
+  if (flag_fan < fan_speed_value) {
+    digitalWrite(FAN_PIN_PWM, HIGH);
+  }
+  else {
+    digitalWrite(FAN_PIN_PWM, LOW);
+  }
+}
+
+void tachISR() {
+  unsigned long m = millis();
+  if ((m-ts2) > DEBOUNCE) {
+    ts1=ts2;
+    ts2=m;
+  }
+}
+
+unsigned long calcRPM() {
+  if(millis()-ts2<FANSTUCK_THRESHOLD && ts2!=0) {
+    return (60000/(ts2-ts1))/2;
+  }
+  else return 0;
+}
 
 //////////////////////////////////
 
@@ -397,7 +450,7 @@ void updateValue() {
     set_point_2 = temperature_preheat.value;
   }
   else if (menu == 2) {
-    //Set fan speed
+    fan_speed_value = fan_speed.value;
   }
 }
 
