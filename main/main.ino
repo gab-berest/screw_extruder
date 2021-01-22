@@ -13,7 +13,7 @@
 
 #define STEP_ACCURACY      1
 #define GEARBOX            15
-#define MAX_STEP_SPEED     1000
+#define MAX_STEP_SPEED     1500
 
 #define LCD_RS             16
 #define LCD_EN             17
@@ -199,9 +199,9 @@ int calculateSpeed(float set_rpm) {
 void setupMotorInit() {
   motor.setEnablePin(E_ENABLE_PIN);
   motor.setPinsInverted(false, false, true); //invert logic of enable pin
-  motor.enableOutputs();
+  motor.disableOutputs();
   motor.setMaxSpeed(MAX_STEP_SPEED);
-  motor.setSpeed(calculateSpeed(rpm_value));
+  motor.setSpeed(calculateSpeed(rpm_value));  
 }
 
 ISR(TIMER1_COMPA_vect) {
@@ -381,7 +381,7 @@ void rightTune() {
     Ki+=0.01;
     temp_1.SetTunings(Kp,Ki,0);
     temp_2.SetTunings(Kp,Ki,0);
-    lcd.setCursor(11,0);
+    lcd.setCursor(13,0);
     lcd.print(Ki);
   }
   if (init_tuning == 2 || init_tuning == 5) {
@@ -405,7 +405,7 @@ void leftTune() {
     Ki-=0.01;
     temp_1.SetTunings(Kp,Ki,0);
     temp_2.SetTunings(Kp,Ki,0);
-    lcd.setCursor(11,0);
+    lcd.setCursor(13,0);
     lcd.print(Ki);
   }
   if (init_tuning == 2 || init_tuning == 5) {
@@ -435,6 +435,10 @@ void clickTune() {
 
 void updateValue() {
   if (menu == 3) {
+    if (rpm.value == 0) 
+      motor.disableOutputs();
+    else
+      motor.enableOutputs();
     rpm_value = rpm.value;
     rpm_current.value = rpm_value;
     lcd.setCursor(17, 1);
@@ -970,14 +974,9 @@ void loop() {
 
     if (temp_update >= 2500 && !safety_stop) {
       updateTemperature();
-      //Serial.print(input_1);
-      //Serial.print(" ");
-      //Serial.println(input_2);
-      Serial.print(set_point_1);
+      Serial.print(input_1);
       Serial.print(" ");
-      Serial.print(set_point_2);
-      Serial.print(" ");
-      Serial.println(rpm_value);
+      Serial.println(input_2);
       logSD(input_1, input_2);
       temp_update = 0;
     }
