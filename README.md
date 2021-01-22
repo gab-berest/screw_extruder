@@ -8,11 +8,13 @@ Use the arduino software [Arduino](https://www.arduino.cc/en/software) to instal
 
 ## Usage
 
-Use the encoder to select one of the two top menus: RPM or Temperature.
+Use the encoder to select one of the four top menus: RPM, Nozzle Temperature, Preheat temperature and fan speed.
 
-RPM selects the mototr speed in rotation per minute.
-Temperature sets the contorl temperature of the nozzle heater band and automaticcaly sets the preheat to half.
+RPM selects the motor speed in rotation per minute.
+Temperature nozzle sets the control temperature of the nozzle heater band.
+Temperature preheat sets the control temperature of the preheat heater band.
+Fan speed sets the fan speed.
 
-Two bottom menus only show the current speed of the motor and the current temperature of each heat band.
+Three bottom menus only show the current speed of the motor, the nozzle temperature and the preheat temperature.
 
 Data folders are the data used to tune the default PID values.
