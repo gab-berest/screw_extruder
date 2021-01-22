@@ -268,7 +268,7 @@ void right() {
     if (menu < (SETTING_MENU-1))
       menu++;
   }
-  else {// if (screen[menu] < 425){
+  else if (screen[menu]->value < 425){
     screen[menu]->value++;
   }  
   updateScreen();
@@ -775,6 +775,8 @@ bool tunePID() {
     }
   }
   saveConfig(Kp, Ki, Kd);
+  set_point_1 = 25;
+  set_point_2 = 25;
 }
 
 bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
