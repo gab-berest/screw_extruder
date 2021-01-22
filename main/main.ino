@@ -233,25 +233,25 @@ void setupLCD() {
   
   rpm.id = 0;
   rpm.value = 0;
-  strcpy(rpm.label, "RPM SET: ");
+  strcpy(rpm.label, "RPM SET:");
   temperature_current_nozzle.id = 1;
   temperature_current_nozzle.value = 0;
-  strcpy(temperature_current_nozzle.label, "NOZZLE TEMP: ");
+  strcpy(temperature_current_nozzle.label, "NOZZLE TEMP:");
   rpm_current.id = 2;
   rpm_current.value = rpm_value;
   strcpy(rpm_current.label, "RPM: ");
   temperature_current_preheat.id = 3;
   temperature_current_preheat.value = 0;
-  strcpy(temperature_current_preheat.label, "PREHEAT TEMP: ");
+  strcpy(temperature_current_preheat.label, "PREHEAT TEMP:");
   temperature_nozzle.id = 4;
   temperature_nozzle.value = 25;
-  strcpy(temperature_nozzle.label, "NOZZLE SET TEMP: ");
+  strcpy(temperature_nozzle.label, "NOZZLE SET TEMP:");
   temperature_preheat.id = 5;
   temperature_preheat.value = 25;
-  strcpy(temperature_preheat.label, "PREHEAT SET TEMP: ");
+  strcpy(temperature_preheat.label, "PRE SET TEMP:");
   fan_speed.id = 6;
   fan_speed.value = 0;
-  strcpy(fan_speed.label, "FAN SPEED: ");
+  strcpy(fan_speed.label, "FAN SPEED:");
 
   screen[3] = &rpm;
   screen[4] = &rpm_current;
@@ -265,11 +265,10 @@ void setupLCD() {
     lcd.setCursor(0, i-3);
      if (i == 3)
       lcd.print(">");
-     lcd.print(screen[i-3]->label);
+     lcd.print(screen[i]->label);
      lcd.setCursor(17, i-3);
-     lcd.print(screen[i-3]->value);
+     lcd.print(screen[i]->value);
   }
-
    menu = 0;
    menu_old = 0;
 }
@@ -289,7 +288,7 @@ void right() {
     if (menu < (SETTING_MENU-1))
       menu++;
   }
-  else {// if (screen[menu] < 425){
+  else if (screen[menu]->value < 425){
     screen[menu]->value++;
   }  
   updateScreen();
@@ -372,7 +371,7 @@ void clickTune() {
       lcd.print(Kp);
     }
     if (init_tuning == 1 || init_tuning == 4) {
-      lcd.setCursor(11,0);
+      lcd.setCursor(13,0);
       lcd.print(Ki);
     }
     if (init_tuning == 2 || init_tuning == 5) {
@@ -388,7 +387,7 @@ void updateValue() {
     lcd.setCursor(17, 1);
     lcd.print("   ");
     lcd.setCursor(17, 1);
-    lcd.print(screen[2]->value);
+    lcd.print(screen[menu]->value);
   }
   else if (menu == 0) {
     set_point_1 = temperature_nozzle.value;
@@ -403,29 +402,33 @@ void updateValue() {
 
 void updateScreen() {
   if (menu_level_old == 0) {
-    lcd.setCursor(0, menu_old);
-    lcd.print("                ");
-    lcd.setCursor(0, menu_old);
-    lcd.print(screen[menu_old]->label);
+    lcd.setCursor(0, 0);
+    lcd.print("                    ");
+    lcd.setCursor(0, 0);
+    lcd.print(screen[menu]->label);
+    lcd.setCursor(17, 0);
+    lcd.print(screen[menu]->value);
   }
   else {
-    lcd.setCursor(16, menu_old);
+    lcd.setCursor(16, 0);
     lcd.print("    ");
-    lcd.setCursor(17, menu_old);
+    lcd.setCursor(17, 0);
     lcd.print(screen[menu]->value);
   }
   
   if (menu_level != 0) {
-    lcd.setCursor(16, menu);
+    lcd.setCursor(16, 0);
     lcd.print("    ");
-    lcd.setCursor(16, menu);
+    lcd.setCursor(16, 0);
     lcd.print(">");
     lcd.print(screen[menu]->value);
   }
   else {
-    lcd.setCursor(0, menu);
+    lcd.setCursor(0, 0);
     lcd.print(">");
     lcd.print(screen[menu]->label);
+    lcd.setCursor(17, 0);
+    lcd.print(screen[menu]->value);
   }
   menu_old = menu;
   menu_level_old = menu_level;
@@ -436,16 +439,7 @@ void updateTemperature() {
   lcd.print("   ");
   lcd.setCursor(17, 2);
   if (input_1 <= 0) {
-    lcd.print("  ");
     lcd.print(0);
-  }
-  else if (input_1 < 10) {
-    lcd.print("  ");
-    lcd.print((int)input_1);
-  }
-  else if (input_1 < 100) {
-    lcd.print(" ");
-    lcd.print((int)input_1);
   }
   else if (input_1 < 1000)
     lcd.print((int)input_1);
@@ -456,16 +450,7 @@ void updateTemperature() {
   lcd.print("   ");
   lcd.setCursor(17, 3);
   if (input_2 <= 0) {
-    lcd.print("  ");
     lcd.print(0);
-  }
-  else if (input_2 < 10) {
-    lcd.print("  ");
-    lcd.print((int)input_2);
-  }
-  else if (input_2 < 100) {
-    lcd.print(" ");
-    lcd.print((int)input_2);
   }
   else if (input_2 < 1000)
     lcd.print((int)input_2);
@@ -516,14 +501,14 @@ void initTunePID() {
   lcd.print("Kp=");
   lcd.setCursor(3,0);
   lcd.print(Kp);
-  lcd.setCursor(9,0);
+  lcd.setCursor(10,0);
   lcd.print("Ki=");
   lcd.setCursor(0,1);
   lcd.print("Kd=");
   lcd.setCursor(0,2);
-  lcd.print("NOZZLE TEMP:: ");
+  lcd.print("NOZZLE TEMP: ");
   lcd.setCursor(0,3);
-  lcd.print("PREHEAT TEMP:: ");
+  lcd.print("PREHEAT TEMP: ");
 }
 //////////////////////////////////////////////
 
@@ -877,6 +862,8 @@ void setup() {
   setupLCD();
   setupMotorInit();
   setupMotorTimer();
+  set_point_1 = 25;
+  set_point_2 = 25;
 }
 
 void loop() {
@@ -930,9 +917,14 @@ void loop() {
 
     if (temp_update >= 2500 && !safety_stop) {
       updateTemperature();
-      Serial.print(input_1);
+      //Serial.print(input_1);
+      //Serial.print(" ");
+      //Serial.println(input_2);
+      Serial.print(set_point_1);
       Serial.print(" ");
-      Serial.println(input_2);
+      Serial.print(set_point_2);
+      Serial.print(" ");
+      Serial.println(rpm_value);
       logSD(input_1, input_2);
       temp_update = 0;
     }
