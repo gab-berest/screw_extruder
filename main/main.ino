@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 
 #define TUNE_PIN           63
+#define AUTOTUNE_PIN       4
 
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
@@ -326,8 +327,7 @@ void setupLCD() {
    menu_old = 0;
 }
 
-void setupLCDTune() {
-  setupLCD();
+void initAutoTunePID() {
   lcd.setCursor(0,0);
   lcd.print("Tuning heat bands...");
   lcd.setCursor(0,1);
@@ -637,121 +637,10 @@ void setupTemp() {
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
 
+  if(digitalRead(AUTOTUNE_PIN) == HIGH) {
+    autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1);
+  }
   if(digitalRead(TUNE_PIN) == LOW) {
-    /*double D, A, Pu, Ku;
-    while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1));
-    D = 120/2;
-    A = abs_max - abs_min;
-    Pu = abs_max_time_2 - abs_max_time_1;
-    Ku = 4*D/(3.14159*A);
-    Kp = 50*0.6*Ku;
-    Ki = 100*1.2*Ku/Pu;
-    Kd = 0.01*0.075*Ku*Pu;
-    lcd.setCursor(3,2);
-    if (Kp < 10) {
-      lcd.print("  "); 
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 1000)
-      lcd.print((int)Kp);
-    else
-      lcd.print((int)Kp);
-    
-    lcd.setCursor(10,2);
-    if (Kd < 10) {
-      lcd.print("  ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 1000)
-      lcd.print((int)Kd);
-    else
-      lcd.print((int)Kd);
-      
-    lcd.setCursor(17,2);
-    if (Ki < 10) {
-      lcd.print("  ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 100) {
-      lcd.print(" ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 1000)
-      lcd.print((int)Ki);
-    else
-      lcd.print((int)Ki);
-    delay(30000);
-    temp_1.SetTunings(Kp, Ki, Kd);
-    lcd.setCursor(0,2);
-    lcd.print("Kp=    Kd=    Ki=    ");
-  
-    abs_max = 100;
-    abs_min = 100;
-    abs_max_time_1 = 0;
-    abs_min_time_1 = 0;
-    abs_max_time_2 = 0;
-    abs_min_time_2 = 0;
-    init_tuning = 0;
-  
-    while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 2));
-    D = 120/2;
-    A = abs_max - abs_min;
-    Pu = abs_min_time_2 - abs_min_time_1;
-    Ku = 4*D/(3.14159*A);
-    Kp = 50*0.6*Ku;
-    Ki = 100*1.2*Ku/Pu; //284
-    Kd = 0.00025*0.075*Ku*Pu;  //0
-      lcd.setCursor(4,2);
-    if (Kp < 10) {
-      lcd.print("  ");
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 1000)
-      lcd.print((int)Kp);
-    else
-      lcd.print((int)Kp);
-    
-    lcd.setCursor(11,2);
-    if (Kd < 10) {
-      lcd.print("  ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 1000)
-      lcd.print((int)Kd);
-    else
-      lcd.print((int)Kd);
-      
-    lcd.setCursor(18,2);
-    if (Ki < 10) {
-      lcd.print("  ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 100) {
-      lcd.print(" ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 1000)
-      lcd.print((int)Ki);
-    else
-      lcd.print((int)Ki);
-    delay(30000);
-    temp_2.SetTunings(Kp, Ki, Kd);*/
     tunePID();
   }
   else {
@@ -853,69 +742,120 @@ bool tunePID() {
   set_point_2 = 25;
 }
 
-bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
-  
-  Serial.print("LOOP ");
-  Serial.print(flag_temp);
-  Serial.print("\n");
-  if (flag_temp == 1) {
-    if (temp_update >= 2500) {
-      updateTemperatureTune(id, input_1);
-      temp_update = 0;
-    }
-    input_1 = analogRead(input_pin);
-    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
-
-    if (input_1 > thresh_high) {
-      digitalWrite(output_pin, LOW);
-      if (init_tuning == 0)
-        init_tuning = 1;
-      else if (init_tuning == 2)
-        init_tuning = 3;
-      else if (init_tuning == 4)
-        init_tuning = 5;
-    }
-    else if (input_1 < thresh_low) {
-      digitalWrite(output_pin, HIGH);
-      if (init_tuning == 1)
-        init_tuning = 2;
-      else if (init_tuning == 3)
-        init_tuning = 4;
-      else if (init_tuning == 5) {
-        digitalWrite(output_pin, LOW);
-        return true;
+void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
+  initAutoTunePID();
+  while (1) {
+    if (flag_temp == 1) {
+      if (temp_update >= 2500) {
+        updateTemperatureTune(id, input_1);
+        temp_update = 0;
       }
+      input_1 = analogRead(input_pin);
+      input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+  
+      if (input_1 > thresh_high) {
+        digitalWrite(output_pin, LOW);
+        if (init_tuning == 0)
+          init_tuning = 1;
+        else if (init_tuning == 2)
+          init_tuning = 3;
+        else if (init_tuning == 4)
+          init_tuning = 5;
+      }
+      else if (input_1 < thresh_low) {
+        digitalWrite(output_pin, HIGH);
+        if (init_tuning == 1)
+          init_tuning = 2;
+        else if (init_tuning == 3)
+          init_tuning = 4;
+        else if (init_tuning == 5) {
+          digitalWrite(output_pin, LOW);
+          break;
+        }
+      }
+  
+      if (input_1 >= abs_max && init_tuning == 3) {
+        abs_max = input_1;
+        abs_max_time_1 = millis(); 
+      }
+      
+      if (input_1 < abs_min && init_tuning == 2) {
+        abs_min = input_1;
+        abs_min_time_1 = millis();
+      }
+  
+      if (input_1 >= abs_max && init_tuning == 5) {
+        abs_max = input_1;
+        abs_max_time_2 = millis(); 
+      }
+      
+      if (input_1 < abs_min && init_tuning == 4) {
+        abs_min = input_1;
+        abs_min_time_2 = millis();
+      }
+      flag_temp = 0;
     }
-
-    if (input_1 >= abs_max && init_tuning == 3) {
-      abs_max = input_1;
-      abs_max_time_1 = millis(); 
-    }
-    
-    if (input_1 < abs_min && init_tuning == 2) {
-      abs_min = input_1;
-      abs_min_time_1 = millis();
-    }
-
-    if (input_1 >= abs_max && init_tuning == 5) {
-      abs_max = input_1;
-      abs_max_time_2 = millis(); 
-    }
-    
-    if (input_1 < abs_min && init_tuning == 4) {
-      abs_min = input_1;
-      abs_min_time_2 = millis();
-    }
-    flag_temp = 0;
   }
-  return false;
+  double D, A, Pu, Ku;
+  D = 120/2;
+  A = abs_max - abs_min;
+  Pu = abs_max_time_2 - abs_max_time_1;
+  Ku = 4*D/(3.14159*A);
+  Kp = 50*0.6*Ku;
+  Ki = 100*1.2*Ku/Pu;
+  Kd = 0.01*0.075*Ku*Pu;
+  lcd.setCursor(3,2);
+  if (Kp < 10) {
+    lcd.print("  "); 
+    lcd.print((int)Kp);
+  }
+  else if (Kp < 100) {
+    lcd.print(" ");
+    lcd.print((int)Kp);
+  }
+  else if (Kp < 1000)
+    lcd.print((int)Kp);
+  else
+    lcd.print((int)Kp);
+  
+  lcd.setCursor(10,2);
+  if (Kd < 10) {
+    lcd.print("  ");
+    lcd.print((int)Kd);
+  }
+  else if (Kd < 100) {
+    lcd.print(" ");
+    lcd.print((int)Kd);
+  }
+  else if (Kd < 1000)
+    lcd.print((int)Kd);
+  else
+    lcd.print((int)Kd);
+    
+  lcd.setCursor(17,2);
+  if (Ki < 10) {
+    lcd.print("  ");
+    lcd.print((int)Ki);
+  }
+  else if (Ki < 100) {
+    lcd.print(" ");
+    lcd.print((int)Ki);
+  }
+  else if (Ki < 1000)
+    lcd.print((int)Ki);
+  else
+    lcd.print((int)Ki);
+  delay(30*1000);
+  temp_1.SetTunings(Kp, Ki, Kd);
+  temp_2.SetTunings(Kp, Ki, Kd);
+  saveConfig(Kp, Ki, Kd);
 }
 //////////////////////////////////////////////
 
 void setup() {
   Serial.begin(9600);
   setupSD();
-  setupLCDTune();
+  setupLCD();
   setupEncoder();
   setupTemp();
   setupLCD();
@@ -952,7 +892,7 @@ void loop() {
     }   
 
     ////////////////AUTOMATIC SAFETY/////////////////////////
-    if (input_1 > 450 || input_2 > 450 || safety_stop) {
+    if (input_1 > 450 || input_2 > 450 || safety_stop || input_1 < 0 || input_2 < 0) {
       output_1 = 0;
       output_2 = 0;
       if (!safety_stop) {
@@ -961,7 +901,7 @@ void loop() {
         safety_stop = true;
       }
     }
-    if (input_1 < 50 && input_2 < 50 && safety_stop) {
+    if (input_1 < 50 && input_2 < 50 && safety_stop && input_1 > 0 && input_2 > 0) {
       digitalWrite(BUZZER, LOW);
       setupLCD();
       safety_stop = false;
