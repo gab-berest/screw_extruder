@@ -47,7 +47,7 @@
 #define TEMP_INPUT_PIN_3   5
 #define TEMP_OUTPUT_PIN_1  8
 #define TEMP_OUTPUT_PIN_2  9
-#define TEMP_OUTPUT_PIN_3  10
+#define TEMP_OUTPUT_PIN_3  -1
 
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
@@ -104,9 +104,9 @@ int encoder_click_status_old = HIGH;
  * Kd=140
  * Kp=50
  */
-double Kd = 50;         
-double Kp = 25;         
-double Ki = 0.05;       
+double Kd = 40;         
+double Kp = 30;         
+double Ki = 0.5;       
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
 double set_point_2, input_2, output_2;
@@ -510,14 +510,25 @@ void updateTemperature() {
   else
     lcd.print(999);
   
-  lcd.setCursor(17, 3);
+  lcd.setCursor(13, 3);
   lcd.print("   ");
-  lcd.setCursor(17, 3);
+  lcd.setCursor(13, 3);
   if (input_2 <= 0) {
     lcd.print(0);
   }
   else if (input_2 < 1000)
     lcd.print((int)input_2);
+  else
+    lcd.print(999);
+
+  lcd.setCursor(16, 3);
+  lcd.print("/");
+  lcd.setCursor(17, 3);
+  if (input_3 <= 0) {
+    lcd.print(0);
+  }
+  else if (input_3 < 1000)
+    lcd.print((int)input_3);
   else
     lcd.print(999);
 }
@@ -727,7 +738,7 @@ bool tunePID() {
       else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
       if (output_3 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_3, HIGH);
       else digitalWrite(TEMP_OUTPUT_PIN_3, LOW);
-  
+        
       if (temp_update >= 2500 && !safety_stop) {
         updateTemperature();
         Serial.print(input_1);
@@ -943,7 +954,7 @@ void loop() {
       updateTemperature();
       Serial.print(input_1);
       Serial.print(" ");
-      Serial.println(input_2);
+      Serial.print(input_2);
       Serial.print(" ");
       Serial.println(input_3);
       logSD(input_1, input_2, input_3);
@@ -960,7 +971,12 @@ void loop() {
       buzzer_update = 0;
     }
         
-    else if(temp_update >= 1000 && safety_stop) {
+    else if(temp_update >= 2500 && safety_stop) {
+      Serial.print(input_1);
+      Serial.print(" ");
+      Serial.print(input_2);
+      Serial.print(" ");
+      Serial.println(input_3);
       updateSafety();
       temp_update = 0;
     }
