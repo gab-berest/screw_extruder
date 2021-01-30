@@ -855,11 +855,11 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 void setup() {
   Serial.begin(9600);
   setupSD();
+  setupMotorInit();
   setupLCD();
   setupEncoder();
   setupTemp();
   setupLCD();
-  setupMotorInit();
   setupMotorTimer();
 }
 
