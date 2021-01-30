@@ -44,8 +44,10 @@
 
 #define TEMP_INPUT_PIN_1   3
 #define TEMP_INPUT_PIN_2   4
+#define TEMP_INPUT_PIN_3   5
 #define TEMP_OUTPUT_PIN_1  8
 #define TEMP_OUTPUT_PIN_2  9
+#define TEMP_OUTPUT_PIN_3  10
 
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
@@ -109,6 +111,8 @@ double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
 double set_point_2, input_2, output_2;
 PID temp_2(&input_2, &output_2, &set_point_2, Kp, Ki, Kd, DIRECT);
+double set_point_3, input_3, output_3;
+PID temp_3(&input_3, &output_3, &set_point_3, Kp, Ki, Kd, DIRECT);
 int window_size = 5000;
 unsigned long window_start_time;
 
@@ -268,11 +272,13 @@ void saveConfig(double Kp, double Ki, double Kd) {
   database_file.close();
 }
 
-void logSD(int temp_nozzle, int temp_pre) {
+void logSD(int temp_nozzle, int temp_pre, int temp_pre_2) {
   log_file.print("Nozzle temp: ");
   log_file.print(temp_nozzle);
   log_file.print(" / Preheat temp: ");
-  log_file.println(temp_pre);
+  log_file.print(temp_pre);
+  log_file.print(" / Preheat temp 2: ");
+  log_file.println(temp_pre_2);
   log_file.flush();
 }
 /////////////////////////////////////////////
@@ -353,8 +359,8 @@ void left() {
       menu--;
   }
   else {
-    if (screen[menu]->value > 0)
-      screen[menu]->value--;
+    //if (screen[menu]->value > 0)
+    screen[menu]->value--;
   } 
   updateScreen();
 }
@@ -451,6 +457,7 @@ void updateValue() {
   }
   else if (menu == 1) {
     set_point_2 = temperature_preheat.value;
+    set_point_3 = temperature_preheat.value;
   }
   else if (menu == 2) {
     fan_speed_value = fan_speed.value;
@@ -620,12 +627,15 @@ void setupTemp() {
   window_start_time = millis();
   set_point_1 = 25;
   set_point_2 = 25;
+  set_point_3 = 25;
 
   temp_1.SetOutputLimits(0, window_size);
   temp_2.SetOutputLimits(0, window_size);
+  temp_3.SetOutputLimits(0, window_size);
 
   temp_1.SetMode(AUTOMATIC);
   temp_2.SetMode(AUTOMATIC);
+  temp_3.SetMode(AUTOMATIC);
 
   noInterrupts();
   TCCR3A = 0;
@@ -646,6 +656,7 @@ void setupTemp() {
   else {
     temp_1.SetTunings(Kp,Ki,Kd);
     temp_2.SetTunings(Kp,Ki,Kd);
+    temp_3.SetTunings(Kp,Ki,Kd);
     Serial.println(Kp);
     Serial.println(Ki);
     Serial.println(Kd);
@@ -661,6 +672,7 @@ ISR(TIMER3_COMPA_vect) {
 bool tunePID() {
   set_point_1 = 100;
   set_point_2 = 50;
+  set_point_3 = 50;
   init_tuning = 0;
   initTunePID();
   while(init_tuning < 3) {
@@ -682,8 +694,11 @@ bool tunePID() {
       input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
       input_2 = analogRead(TEMP_INPUT_PIN_2);
       input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+      input_3 = analogRead(TEMP_INPUT_PIN_3);
+      input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
       temp_1.Compute();
       temp_2.Compute();
+      temp_3.Compute();
     
       unsigned long now = millis();
       if (now - window_start_time > window_size) {
@@ -691,7 +706,7 @@ bool tunePID() {
       }   
   
       ////////////////AUTOMATIC SAFETY/////////////////////////
-      if (input_1 > 450 || input_2 > 450 || safety_stop) {
+      if (input_1 > 450 || input_2 > 450 || input_3 > 450 || safety_stop || input_1 < 0 || input_2 < 0 || input_3 < 0) {
         output_1 = 0;
         output_2 = 0;
         if (!safety_stop) {
@@ -700,7 +715,7 @@ bool tunePID() {
           safety_stop = true;
         }
       }
-      if (input_1 < 50 && input_2 < 50 && safety_stop) {
+      if (input_1 < 50 && input_2 < 50 && input_3 < 50 && safety_stop && input_1 > 0 && input_2 > 0 && input_3 > 0){
         digitalWrite(BUZZER, LOW);
         setupLCD();
         safety_stop = false;
@@ -710,17 +725,21 @@ bool tunePID() {
       else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
       if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
       else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+      if (output_3 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_3, HIGH);
+      else digitalWrite(TEMP_OUTPUT_PIN_3, LOW);
   
       if (temp_update >= 2500 && !safety_stop) {
         updateTemperature();
         Serial.print(input_1);
         Serial.print(" ");
-        Serial.println(input_2);
+        Serial.print(input_2);
+        Serial.print(" ");
+        Serial.println(input_3);
         temp_update = 0;
       }
   
       if (buzzer_update >= 2500 && !safety_stop) {
-        if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20) {
+        if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20 || input_3 > set_point_3 + 20) {
           digitalWrite(BUZZER, !digitalRead(BUZZER));
         }
         else {
@@ -740,6 +759,7 @@ bool tunePID() {
   saveConfig(Kp, Ki, Kd);
   set_point_1 = 25;
   set_point_2 = 25;
+  set_point_3 = 25;
 }
 
 void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
@@ -848,6 +868,7 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
   delay(30*1000);
   temp_1.SetTunings(Kp, Ki, Kd);
   temp_2.SetTunings(Kp, Ki, Kd);
+  temp_3.SetTunings(Kp, Ki, Kd);
   saveConfig(Kp, Ki, Kd);
 }
 //////////////////////////////////////////////
@@ -883,8 +904,11 @@ void loop() {
     input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
     input_2 = analogRead(TEMP_INPUT_PIN_2);
     input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+    input_3 = analogRead(TEMP_INPUT_PIN_3);
+    input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
     temp_1.Compute();
     temp_2.Compute();
+    temp_3.Compute();
   
     unsigned long now = millis();
     if (now - window_start_time > window_size) {
@@ -892,16 +916,17 @@ void loop() {
     }   
 
     ////////////////AUTOMATIC SAFETY/////////////////////////
-    if (input_1 > 450 || input_2 > 450 || safety_stop || input_1 < 0 || input_2 < 0) {
+    if (input_1 > 450 || input_2 > 450 || input_3 > 450 || safety_stop || input_1 < 0 || input_2 < 0 || input_3 < 0) {
       output_1 = 0;
       output_2 = 0;
+      output_3 = 0;
       if (!safety_stop) {
         digitalWrite(BUZZER, HIGH);
         initSafety();
         safety_stop = true;
       }
     }
-    if (input_1 < 50 && input_2 < 50 && safety_stop && input_1 > 0 && input_2 > 0) {
+    if (input_1 < 50 && input_2 < 50 && input_3 < 50 && safety_stop && input_1 > 0 && input_2 > 0 && input_3 > 0) {
       digitalWrite(BUZZER, LOW);
       setupLCD();
       safety_stop = false;
@@ -911,19 +936,23 @@ void loop() {
     else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
     if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
     else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+    if (output_3 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_3, HIGH);
+    else digitalWrite(TEMP_OUTPUT_PIN_3, LOW);
 
     if (temp_update >= 2500 && !safety_stop) {
       updateTemperature();
       Serial.print(input_1);
       Serial.print(" ");
       Serial.println(input_2);
-      logSD(input_1, input_2);
+      Serial.print(" ");
+      Serial.println(input_3);
+      logSD(input_1, input_2, input_3);
       temp_update = 0;
     }
 
     if (buzzer_update >= 2500 && !safety_stop) {
-      if (input_1 > set_point_1 + 20) {
-        digitalWrite(BUZZER, LOW); //digitalWrite(BUZZER, !digitalRead(BUZZER));
+      if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20 || input_3 > set_point_3 + 20) {
+        digitalWrite(BUZZER, !digitalRead(BUZZER));
       }
       else {
         digitalWrite(BUZZER, LOW);
