@@ -106,7 +106,7 @@ int encoder_click_status_old = HIGH;
  */
 double Kd = 40;         
 double Kp = 30;         
-double Ki = 0.5;       
+double Ki = 0.75;       
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
 double set_point_2, input_2, output_2;
