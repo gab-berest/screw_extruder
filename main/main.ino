@@ -5,8 +5,8 @@
 #include <SD.h>
 #include <ArduinoJson.h>
 
-#define TUNE_PIN           63
-#define AUTOTUNE_PIN       4
+#define TUNE_PIN           42
+#define AUTOTUNE_PIN       44
 
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
@@ -631,9 +631,14 @@ ISR(TIMER2_COMPA_vect) {
 void setupTemp() {
   pinMode(TEMP_OUTPUT_PIN_1, OUTPUT);
   pinMode(TEMP_OUTPUT_PIN_2, OUTPUT);
+  pinMode(TEMP_OUTPUT_PIN_3, OUTPUT);
 
   pinMode(TEMP_INPUT_PIN_1, INPUT);
   pinMode(TEMP_INPUT_PIN_2, INPUT);
+  pinMode(TEMP_INPUT_PIN_3, INPUT);
+
+  pinMode(TUNE_PIN, INPUT_PULLUP);
+  pinMode(AUTOTUNE_PIN, INPUT_PULLUP);
 
   window_start_time = millis();
   set_point_1 = 25;
@@ -658,7 +663,7 @@ void setupTemp() {
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
 
-  if(digitalRead(AUTOTUNE_PIN) == HIGH) {
+  if(digitalRead(AUTOTUNE_PIN) == LOW) {
     autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1);
   }
   if(digitalRead(TUNE_PIN) == LOW) {
@@ -959,9 +964,7 @@ void loop() {
       Serial.println(input_3);
       logSD(input_1, input_2, input_3);
       temp_update = 0;
-    }
 
-    if (buzzer_update >= 2500 && !safety_stop) {
       if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20 || input_3 > set_point_3 + 20) {
         digitalWrite(BUZZER, !digitalRead(BUZZER));
       }
