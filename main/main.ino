@@ -47,7 +47,7 @@
 #define TEMP_INPUT_PIN_3   5
 #define TEMP_OUTPUT_PIN_1  8
 #define TEMP_OUTPUT_PIN_2  9
-#define TEMP_OUTPUT_PIN_3  -1
+#define TEMP_OUTPUT_PIN_3  10
 
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
@@ -105,8 +105,8 @@ int encoder_click_status_old = HIGH;
  * Kp=50
  */
 double Kd = 40;         
-double Kp = 30;         
-double Ki = 0.75;       
+double Kp = 25;         
+double Ki = 0.5;       
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
 double set_point_2, input_2, output_2;
@@ -966,7 +966,7 @@ void loop() {
       temp_update = 0;
 
       if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20 || input_3 > set_point_3 + 20) {
-        digitalWrite(BUZZER, !digitalRead(BUZZER));
+        digitalWrite(BUZZER, LOW); //!digitalRead(BUZZER));
       }
       else {
         digitalWrite(BUZZER, LOW);
