@@ -32,7 +32,7 @@
 #define ENCODER_RIGHT_PIN  31    
 #define ENCODER_CLICK_PIN  35
 #define BUTTON_DEBOUNCE    10
-#define BUZZER             37
+#define BUZZER             -1 //37
 
 #define SDCARDDETECT       49
 #define SDCARDCS           53
@@ -52,10 +52,9 @@
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
 
-#define FAN_PIN_PWM        -1 //40 //D40
-#define FAN_PIN_TAC        -1 //3 //D3
-#define DEBOUNCE           0
-#define FANSTUCK_THRESHOLD 500
+#define FAN_PIN_PWM        6 //D40
+#define FAN_PIN_TAC        2 //D3
+
 
 struct Menu {
   int id = 0;
@@ -129,55 +128,57 @@ bool safety_stop = false;
 File database_file;
 File log_file;
 
-int fan_speed_value;
-unsigned long volatile ts1=0, ts2=0;
+unsigned long previousRPMMillis;
+unsigned long previousMillis;
+float RPM_fan;
+int state_fan = 0;
+unsigned long interval = 3000;
+volatile unsigned long pulses=0;
+unsigned long lastRPMmillis = 0;
 
 ///////////////////////////////////
 // FAN CONTROL
 ///////////////////////////////////
 void setupFan() {
-  pinMode(FAN_PIN_PWM, OUTPUT);
-  pinMode(FAN_PIN_TAC, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(FAN_PIN_TAC),tachISR,FALLING);
-  
-  noInterrupts();
-  TCCR4A = 0;
-  TCCR4B = 0;
-  TCNT4 = 0;
-  OCR4A = 1;
-  TCCR4B |= (1 << WGM12);
-  TCCR4B |= (1 << CS10) | (1 << CS11);
-  TIMSK4 |= (1 << OCIE4A);
-  interrupts();
+    TCCR4A = 0;
+    TCCR4B = 0;
+    TCNT4  = 0;
+
+    // Mode 10: phase correct PWM with ICR4 as Top (= F_CPU/2/25000)
+    // OC4C as Non-Inverted PWM output
+    ICR4   = (F_CPU/25000)/2;
+    OCR4A  = ICR4/2;                    // default: about 50:50
+    TCCR4A = _BV(COM4A1) | _BV(WGM41);
+    TCCR4B = _BV(WGM43) | _BV(CS40);
+
+    pinMode(FAN_PIN_TAC, INPUT_PULLUP); // Set pin to read the Hall Effect Sensor
+    attachInterrupt(digitalPinToInterrupt(FAN_PIN_TAC), countPulse, RISING); // Attach an interrupt to count
+
+    // Set the PWM pin as output.
+    pinMode( FAN_PIN_PWM, OUTPUT);
 }
 
-ISR(TIMER4_COMPA_vect) {
-  flag_fan++;
-  if (flag_fan >= 10) {
-    flag_fan = 0;
-  }
-
-  if (flag_fan < fan_speed_value) {
-    digitalWrite(FAN_PIN_PWM, HIGH);
-  }
-  else {
-    digitalWrite(FAN_PIN_PWM, LOW);
-  }
-}
-
-void tachISR() {
-  unsigned long m = millis();
-  if ((m-ts2) > DEBOUNCE) {
-    ts1=ts2;
-    ts2=m;
-  }
+void countPulse() {
+  pulses++;
+  flag_fan = 1;
 }
 
 unsigned long calcRPM() {
-  if(millis()-ts2<FANSTUCK_THRESHOLD && ts2!=0) {
-    return (60000/(ts2-ts1))/2;
-  }
-  else return 0;
+  unsigned long RPM_fan;
+  noInterrupts();
+  float elapsedMS = (millis() - lastRPMmillis)/1000.0;
+  unsigned long revolutions = pulses/2;
+  float revPerMS = revolutions / elapsedMS;
+  RPM_fan = revPerMS * 60.0;
+  lastRPMmillis = millis();
+  pulses=0;
+  interrupts();
+
+  return RPM_fan;
+}
+
+void writeFanRPM(int value) {
+  OCR4A = value*320/10;
 }
 
 //////////////////////////////////
@@ -460,7 +461,8 @@ void updateValue() {
     set_point_3 = temperature_preheat.value;
   }
   else if (menu == 2) {
-    fan_speed_value = fan_speed.value;
+    state_fan = fan_speed.value;
+    writeFanRPM(state_fan);
   }
 }
 
@@ -890,9 +892,10 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 //////////////////////////////////////////////
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   setupSD();
   setupMotorInit();
+  setupFan();
   setupLCD();
   setupEncoder();
   setupTemp();
@@ -917,11 +920,11 @@ void loop() {
 
   if (flag_temp == 1) {
     input_1 = analogRead(TEMP_INPUT_PIN_1);
-    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+    input_1 = 0; //((input_1*5.0/1024.0)-1.25)/0.005;
     input_2 = analogRead(TEMP_INPUT_PIN_2);
-    input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+    input_2 = 0; //((input_2*5.0/1024.0)-1.25)/0.005;
     input_3 = analogRead(TEMP_INPUT_PIN_3);
-    input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
+    input_3 = 0; //((input_3*5.0/1024.0)-1.25)/0.005;
     temp_1.Compute();
     temp_2.Compute();
     temp_3.Compute();
@@ -985,5 +988,13 @@ void loop() {
     }
     
     flag_temp = 0;
+  }
+
+  if (millis() - previousMillis > interval) {
+    Serial.print("RPM=");
+    Serial.print(calcRPM());
+    Serial.print(F(" @ PWM="));
+    Serial.println(state_fan);
+    previousMillis = millis(); 
   }
 }
