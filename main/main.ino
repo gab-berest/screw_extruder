@@ -62,17 +62,17 @@ struct Menu {
   char label[16];
 };
 
-int flag_left = 0;
-int flag_right = 0;
-int flag_click = 0;
-int flag_temp = 0;
-int temp_update = 0;
-int buzzer_update = 0;
-int flag_fan = 0;
+volatile int flag_left = 0;
+volatile int flag_right = 0;
+volatile int flag_click = 0;
+volatile int flag_temp = 0;
+volatile int temp_update = 0;
+volatile int buzzer_update = 0;
+volatile int flag_fan = 0;
 
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
-int rpm_old = 0;
-int rpm_value = 0;
+volatile int rpm_old = 0;
+volatile int rpm_value = 0;
 
 LiquidCrystal lcd(LCD_RS,LCD_EN,LCD_PIN_1,LCD_PIN_2,LCD_PIN_3,LCD_PIN_4);
 int menu = 0;
@@ -89,10 +89,10 @@ Menu fan_speed;
 Menu* screen[MAX_MENU];
 
 int encoder_pos = 0;                     
-int encoder_turn_status_old = LOW;                 
-int encoder_turn_status = LOW;                                           
-int encoder_click_status = HIGH;
-int encoder_click_status_old = HIGH; 
+volatile int encoder_turn_status_old = LOW;                 
+volatile int encoder_turn_status = LOW;                                           
+volatile int encoder_click_status = HIGH;
+volatile int encoder_click_status_old = HIGH; 
 
 /*
  * Ku=250
@@ -104,7 +104,7 @@ int encoder_click_status_old = HIGH;
  * Kp=50
  */
 double Kd = 40;         
-double Kp = 25;         
+double Kp = 30;         
 double Ki = 0.5;       
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
@@ -147,7 +147,7 @@ void setupFan() {
     // Mode 10: phase correct PWM with ICR4 as Top (= F_CPU/2/25000)
     // OC4C as Non-Inverted PWM output
     ICR4   = (F_CPU/25000)/2;
-    OCR4A  = ICR4/2;                    // default: about 50:50
+    OCR4A  = 0;                    // default: about 50:50
     TCCR4A = _BV(COM4A1) | _BV(WGM41);
     TCCR4B = _BV(WGM43) | _BV(CS40);
 
@@ -338,9 +338,13 @@ void initAutoTunePID() {
   lcd.setCursor(0,0);
   lcd.print("Tuning heat bands...");
   lcd.setCursor(0,1);
-  lcd.print("  Setting to 100oC  ");
+  lcd.print("  Setting to "); 
+  lcd.print((THRESHHOLD_HIGH+THRESHHOLD_LOW)/2); 
+  lcd.print("oC  ");
   lcd.setCursor(0,2);
-  lcd.print("Kp=    Kd=    Ki=    ");
+  lcd.print("P=   D=    I=       ");
+  lcd.setCursor(0,3);
+  lcd.print("Temperature: ");
 }
 
 void right() {
@@ -635,7 +639,6 @@ void setupTemp() {
   pinMode(TEMP_OUTPUT_PIN_2, OUTPUT);
   pinMode(TEMP_OUTPUT_PIN_3, OUTPUT);
 
-  pinMode(TEMP_INPUT_PIN_1, INPUT);
   pinMode(TEMP_INPUT_PIN_2, INPUT);
   pinMode(TEMP_INPUT_PIN_3, INPUT);
 
@@ -770,7 +773,6 @@ bool tunePID() {
         updateSafety();
         temp_update = 0;
       }
-      
       flag_temp = 0;
     }
   }
@@ -785,7 +787,7 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
   while (1) {
     if (flag_temp == 1) {
       if (temp_update >= 2500) {
-        updateTemperatureTune(id, input_1);
+        updateTemperatureTune(init_tuning, input_1);
         temp_update = 0;
       }
       input_1 = analogRead(input_pin);
@@ -837,53 +839,21 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
   double D, A, Pu, Ku;
   D = 120/2;
   A = abs_max - abs_min;
-  Pu = abs_max_time_2 - abs_max_time_1;
+  Pu = abs_min_time_2 - abs_min_time_1;
   Ku = 4*D/(3.14159*A);
-  Kp = 50*0.6*Ku;
-  Ki = 100*1.2*Ku/Pu;
-  Kd = 0.01*0.075*Ku*Pu;
-  lcd.setCursor(3,2);
-  if (Kp < 10) {
-    lcd.print("  "); 
-    lcd.print((int)Kp);
-  }
-  else if (Kp < 100) {
-    lcd.print(" ");
-    lcd.print((int)Kp);
-  }
-  else if (Kp < 1000)
-    lcd.print((int)Kp);
-  else
-    lcd.print((int)Kp);
+  Kp = 15*0.6*Ku;
+  Kd = 0.008*0.0033*0.0015*0.075*Ku*Pu;
+  Ki = 7.15*10*1000*7.15*1000*1.2*Ku/Pu;
+  lcd.setCursor(2,2);
+  lcd.print((int)Kp);
   
-  lcd.setCursor(10,2);
-  if (Kd < 10) {
-    lcd.print("  ");
-    lcd.print((int)Kd);
-  }
-  else if (Kd < 100) {
-    lcd.print(" ");
-    lcd.print((int)Kd);
-  }
-  else if (Kd < 1000)
-    lcd.print((int)Kd);
-  else
-    lcd.print((int)Kd);
+  lcd.setCursor(7,2);
+  lcd.print((int)Kd);
     
-  lcd.setCursor(17,2);
-  if (Ki < 10) {
-    lcd.print("  ");
-    lcd.print((int)Ki);
-  }
-  else if (Ki < 100) {
-    lcd.print(" ");
-    lcd.print((int)Ki);
-  }
-  else if (Ki < 1000)
-    lcd.print((int)Ki);
-  else
-    lcd.print((int)Ki);
-  delay(30*1000);
+  lcd.setCursor(13,2);
+  lcd.print(Ki);
+  while(temp_update < 100000);
+  temp_update = 0;
   temp_1.SetTunings(Kp, Ki, Kd);
   temp_2.SetTunings(Kp, Ki, Kd);
   temp_3.SetTunings(Kp, Ki, Kd);
@@ -892,7 +862,7 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 //////////////////////////////////////////////
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   setupSD();
   setupMotorInit();
   setupFan();
@@ -920,11 +890,11 @@ void loop() {
 
   if (flag_temp == 1) {
     input_1 = analogRead(TEMP_INPUT_PIN_1);
-    input_1 = 0; //((input_1*5.0/1024.0)-1.25)/0.005;
+    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
     input_2 = analogRead(TEMP_INPUT_PIN_2);
-    input_2 = 0; //((input_2*5.0/1024.0)-1.25)/0.005;
+    input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
     input_3 = analogRead(TEMP_INPUT_PIN_3);
-    input_3 = 0; //((input_3*5.0/1024.0)-1.25)/0.005;
+    input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
     temp_1.Compute();
     temp_2.Compute();
     temp_3.Compute();
@@ -986,7 +956,6 @@ void loop() {
       updateSafety();
       temp_update = 0;
     }
-    
     flag_temp = 0;
   }
 
