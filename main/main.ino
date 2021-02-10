@@ -16,6 +16,8 @@
 #define GEARBOX            15
 #define MAX_STEP_SPEED     1500
 
+#define SPEED_SENSOR       11
+
 #define LCD_RS             16
 #define LCD_EN             17
 #define LCD_PIN_1          23
@@ -135,6 +137,13 @@ int state_fan = 0;
 unsigned long interval = 3000;
 volatile unsigned long pulses=0;
 unsigned long lastRPMmillis = 0;
+
+volatile unsigned long old_speed_time = 0;
+volatile unsigned long speed_time = 0;
+volatile int flag_speed = 0;
+volatile int detect_speed = 0;
+volatile int sensor_speed = 0;
+unsigned long test_count = 0;
 
 ///////////////////////////////////
 // FAN CONTROL
@@ -452,10 +461,10 @@ void updateValue() {
       motor.enableOutputs();
     rpm_value = rpm.value;
     rpm_current.value = rpm_value;
-    lcd.setCursor(17, 1);
-    lcd.print("   ");
-    lcd.setCursor(17, 1);
-    lcd.print(screen[menu]->value);
+    if (rpm_value == 0) {
+      sensor_speed = 0;
+      updateSpeed();
+    }
   }
   else if (menu == 0) {
     set_point_1 = temperature_nozzle.value;
@@ -502,6 +511,13 @@ void updateScreen() {
   }
   menu_old = menu;
   menu_level_old = menu_level;
+}
+
+void updateSpeed() {
+  lcd.setCursor(17, 1);
+  lcd.print("   ");
+  lcd.setCursor(17, 1);
+  lcd.print((int)sensor_speed);
 }
 
 void updateTemperature() {
@@ -861,6 +877,41 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 }
 //////////////////////////////////////////////
 
+/////////////////////////////////////////////
+// Speed reader
+/////////////////////////////////////////////
+void setupSpeedSensor() {
+  noInterrupts();
+  TCCR5A = 0;
+  TCCR5B = 0;
+  TCNT5 = 0;
+  OCR5A = 1;
+  TCCR5B |= (1 << WGM12);
+  TCCR5B |= (1 << CS12) | (1 << CS10);
+  TIMSK5 |= (1 << OCIE5A);
+  interrupts();
+
+  pinMode(SPEED_SENSOR, INPUT_PULLUP);
+}
+
+ISR(TIMER5_COMPA_vect) {
+  if (digitalRead(SPEED_SENSOR) == LOW && detect_speed == 0) {
+    old_speed_time = speed_time;
+    speed_time = millis();
+    flag_speed = 1;
+    detect_speed = 1;
+    if (rpm_value < 0)
+      sensor_speed = -1*0.25*60/((float)speed_time/1000 - (float) old_speed_time/1000);
+    else
+      sensor_speed = 0.25*60/((float)speed_time/1000 - (float) old_speed_time/1000);
+  } 
+  else if (digitalRead(SPEED_SENSOR) == HIGH && detect_speed == 1) {
+    detect_speed = 0;
+  }
+}
+
+////////////////////////////////////////////
+
 void setup() {
   Serial.begin(9600);
   setupSD();
@@ -871,6 +922,9 @@ void setup() {
   setupTemp();
   setupLCD();
   setupMotorTimer();
+  setupSpeedSensor();
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
 }
 
 void loop() {
@@ -895,6 +949,9 @@ void loop() {
     input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
     input_3 = analogRead(TEMP_INPUT_PIN_3);
     input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
+    input_1 = 0;
+    input_2 = 0;
+    input_3 = 0;
     temp_1.Compute();
     temp_2.Compute();
     temp_3.Compute();
@@ -960,10 +1017,34 @@ void loop() {
   }
 
   if (millis() - previousMillis > interval) {
-    Serial.print("RPM=");
+    Serial.print("FAN=");
     Serial.print(calcRPM());
-    Serial.print(F(" @ PWM="));
+    Serial.print(F(" @ LEVEL="));
     Serial.println(state_fan);
     previousMillis = millis(); 
   }
+
+  if (flag_speed == 1) {
+    updateSpeed();
+    flag_speed = 0;
+  }
+  if ((millis() - old_speed_time) > 150000) {
+    sensor_speed = 0;
+    old_speed_time = millis();
+  }
+
+  /*if ((millis() - test_count) >= 1000) {
+    Serial.println("PULSE");
+    Serial.print(test_count);
+    Serial.print(" ");
+    Serial.println(millis());
+    test_count = millis();
+    digitalWrite(4, LOW);
+    while (1) {
+      if (millis() - test_count >= 100) {
+        break;
+      }
+    }
+    digitalWrite(4, HIGH);
+  }*/
 }
