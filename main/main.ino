@@ -949,9 +949,6 @@ void loop() {
     input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
     input_3 = analogRead(TEMP_INPUT_PIN_3);
     input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
-    input_1 = 0;
-    input_2 = 0;
-    input_3 = 0;
     temp_1.Compute();
     temp_2.Compute();
     temp_3.Compute();
