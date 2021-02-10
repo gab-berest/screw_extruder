@@ -881,6 +881,8 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 // Speed reader
 /////////////////////////////////////////////
 void setupSpeedSensor() {
+  pinMode(SPEED_SENSOR, INPUT_PULLUP);
+  
   noInterrupts();
   TCCR5A = 0;
   TCCR5B = 0;
@@ -890,24 +892,22 @@ void setupSpeedSensor() {
   TCCR5B |= (1 << CS12) | (1 << CS10);
   TIMSK5 |= (1 << OCIE5A);
   interrupts();
-
-  pinMode(SPEED_SENSOR, INPUT_PULLUP);
 }
 
 ISR(TIMER5_COMPA_vect) {
   if (digitalRead(SPEED_SENSOR) == LOW && detect_speed == 0) {
     old_speed_time = speed_time;
     speed_time = millis();
-    flag_speed = 1;
     detect_speed = 1;
     if (rpm_value < 0)
-      sensor_speed = -1*0.25*60/((float)speed_time/1000 - (float) old_speed_time/1000);
+      sensor_speed = -1*60/((float)speed_time/1000 - (float) old_speed_time/1000)/36.0;
     else
-      sensor_speed = 0.25*60/((float)speed_time/1000 - (float) old_speed_time/1000);
+      sensor_speed = 60/((float)speed_time/1000 - (float) old_speed_time/1000)/36.0;
   } 
   else if (digitalRead(SPEED_SENSOR) == HIGH && detect_speed == 1) {
     detect_speed = 0;
   }
+  flag_speed++;
 }
 
 ////////////////////////////////////////////
@@ -923,8 +923,8 @@ void setup() {
   setupLCD();
   setupMotorTimer();
   setupSpeedSensor();
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
+  //pinMode(4, OUTPUT);
+  //digitalWrite(4, HIGH);
 }
 
 void loop() {
@@ -1024,16 +1024,16 @@ void loop() {
     previousMillis = millis(); 
   }
 
-  if (flag_speed == 1) {
+  if (flag_speed >= 5000) {
     updateSpeed();
     flag_speed = 0;
   }
-  if ((millis() - old_speed_time) > 150000) {
+  if ((millis() - old_speed_time) > 1666) {
     sensor_speed = 0;
     old_speed_time = millis();
   }
 
-  /*if ((millis() - test_count) >= 1000) {
+  /*if ((millis() - test_count) >= 27) {
     Serial.println("PULSE");
     Serial.print(test_count);
     Serial.print(" ");
@@ -1041,7 +1041,7 @@ void loop() {
     test_count = millis();
     digitalWrite(4, LOW);
     while (1) {
-      if (millis() - test_count >= 100) {
+      if (millis() - test_count >= 2) {
         break;
       }
     }
