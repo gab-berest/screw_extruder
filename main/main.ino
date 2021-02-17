@@ -14,7 +14,7 @@
 
 #define STEP_ACCURACY      1
 #define GEARBOX            15
-#define MAX_STEP_SPEED     1500
+#define MAX_STEP_SPEED     10000
 
 #define SPEED_SENSOR       11
 
@@ -289,6 +289,18 @@ void logSD(int temp_nozzle, int temp_pre, int temp_pre_2) {
   log_file.print(temp_pre);
   log_file.print(" / Preheat temp 2: ");
   log_file.println(temp_pre_2);
+  log_file.flush();
+}
+
+void logSDMotor(int motor) {
+  log_file.print("Motor speed: ");
+  log_file.println(motor);
+  log_file.flush();
+}
+
+void logSDFan(int fan) {
+  log_file.print("Fan speed: ");
+  log_file.println(fan);
   log_file.flush();
 }
 /////////////////////////////////////////////
@@ -881,7 +893,7 @@ void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, in
 // Speed reader
 /////////////////////////////////////////////
 void setupSpeedSensor() {
-  pinMode(SPEED_SENSOR, INPUT_PULLUP);
+  pinMode(SPEED_SENSOR, INPUT);
   
   noInterrupts();
   TCCR5A = 0;
@@ -900,9 +912,9 @@ ISR(TIMER5_COMPA_vect) {
     speed_time = millis();
     detect_speed = 1;
     if (rpm_value < 0)
-      sensor_speed = -1*60/((float)speed_time/1000 - (float) old_speed_time/1000)/36.0;
+      sensor_speed = -1*60/((float)speed_time/1000 - (float) old_speed_time/1000)/18.0;
     else
-      sensor_speed = 60/((float)speed_time/1000 - (float) old_speed_time/1000)/36.0;
+      sensor_speed = 60/((float)speed_time/1000 - (float) old_speed_time/1000)/18.0;
   } 
   else if (digitalRead(SPEED_SENSOR) == HIGH && detect_speed == 1) {
     detect_speed = 0;
@@ -993,7 +1005,7 @@ void loop() {
       temp_update = 0;
 
       if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20 || input_3 > set_point_3 + 20) {
-        digitalWrite(BUZZER, LOW); //!digitalRead(BUZZER));
+        digitalWrite(BUZZER, !digitalRead(BUZZER));
       }
       else {
         digitalWrite(BUZZER, LOW);
@@ -1002,6 +1014,7 @@ void loop() {
     }
         
     else if(temp_update >= 2500 && safety_stop) {
+      Serial.print("Temperatures: ");
       Serial.print(input_1);
       Serial.print(" ");
       Serial.print(input_2);
@@ -1014,34 +1027,24 @@ void loop() {
   }
 
   if (millis() - previousMillis > interval) {
-    Serial.print("FAN=");
-    Serial.print(calcRPM());
+    int fan_s = calcRPM();
+    Serial.print("Fan speed: ");
+    Serial.print(fan_s);
     Serial.print(F(" @ LEVEL="));
     Serial.println(state_fan);
+    logSDFan(fan_s);
     previousMillis = millis(); 
   }
 
   if (flag_speed >= 5000) {
+    Serial.print("Motor speed: ");
+    Serial.println(sensor_speed);
+    logSDMotor(sensor_speed);
     updateSpeed();
     flag_speed = 0;
   }
-  if ((millis() - old_speed_time) > 1666) {
+  if ((millis() - old_speed_time) > 3332) {
     sensor_speed = 0;
     old_speed_time = millis();
   }
-
-  /*if ((millis() - test_count) >= 27) {
-    Serial.println("PULSE");
-    Serial.print(test_count);
-    Serial.print(" ");
-    Serial.println(millis());
-    test_count = millis();
-    digitalWrite(4, LOW);
-    while (1) {
-      if (millis() - test_count >= 2) {
-        break;
-      }
-    }
-    digitalWrite(4, HIGH);
-  }*/
 }
