@@ -18,6 +18,13 @@
 
 #define SPEED_SENSOR       11
 
+#define WINDER_STEP_PIN    -1 //36
+#define WINDER_DIR_PIN     -1 //34
+#define WINDER_ENABLE_PIN  -1 //30
+#define WINDER_ACCURACY    1
+#define GEARBOX            1
+#define MAX_WINDER_SPEED   1
+
 #define LCD_RS             16
 #define LCD_EN             17
 #define LCD_PIN_1          23
@@ -54,8 +61,8 @@
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
 
-#define FAN_PIN_PWM        6 //D40
-#define FAN_PIN_TAC        2 //D3
+#define FAN_PIN_PWM        6
+#define FAN_PIN_TAC        2
 
 
 struct Menu {
@@ -75,6 +82,7 @@ volatile int flag_fan = 0;
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
 volatile int rpm_old = 0;
 volatile int rpm_value = 0;
+AccelStepper winder = AccelStepper(AccelStepper::DRIVER, WINDER_STEP_PIN, WINDER_DIR_PIN);
 
 LiquidCrystal lcd(LCD_RS,LCD_EN,LCD_PIN_1,LCD_PIN_2,LCD_PIN_3,LCD_PIN_4);
 int menu = 0;
@@ -211,20 +219,32 @@ int calculateSpeed(float set_rpm) {
   return (360.0/1.8*STEP_ACCURACY)*set_rpm/60.0*GEARBOX;
 }
 
+int calculateWinder(float set_rpm) {
+  return (360.0/1.8*WINDER_ACCURACY)*set_rpm/60.0*GEARBOX;
+}
+
 void setupMotorInit() {
   motor.setEnablePin(E_ENABLE_PIN);
   motor.setPinsInverted(false, false, true); //invert logic of enable pin
   motor.disableOutputs();
   motor.setMaxSpeed(MAX_STEP_SPEED);
-  motor.setSpeed(calculateSpeed(rpm_value));  
+  motor.setSpeed(calculateSpeed(rpm_value));
+
+  winder.setEnablePin(WINDER_ENABLE_PIN);
+  winder.setPinsInverted(false, false, true);
+  winder.disableOutputs();
+  winder.setMaxSpeed(MAX_WINDER_SPEED);
+  winder.setSpeed(calculateWinder(rpm_value));
 }
 
 ISR(TIMER1_COMPA_vect) {
   if (rpm_old != rpm_value) {
     motor.setSpeed(calculateSpeed(rpm_value));
+    winder.setSpeed(calculateWinder(rpm_value));
     rpm_old = rpm_value;
   }
   motor.runSpeed();
+  winder.runSpeed();
 }
 //////////////////////////////////////////////
 
@@ -467,10 +487,14 @@ void clickTune() {
 
 void updateValue() {
   if (menu == 3) {
-    if (rpm.value == 0) 
+    if (rpm.value == 0) {
       motor.disableOutputs();
-    else
+      winder.disableOutputs();
+    }
+    else {
       motor.enableOutputs();
+      winder.enableOutputs();
+    }
     rpm_value = rpm.value;
     rpm_current.value = rpm_value;
     if (rpm_value == 0) {
