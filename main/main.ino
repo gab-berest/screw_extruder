@@ -5,7 +5,8 @@
 #include <SD.h>
 #include <ArduinoJson.h>
 
-#define TUNE_PIN           63
+#define TUNE_PIN           42
+#define AUTOTUNE_PIN       44
 
 #define E_STEP_PIN         26
 #define E_DIR_PIN          28
@@ -13,7 +14,9 @@
 
 #define STEP_ACCURACY      1
 #define GEARBOX            15
-#define MAX_STEP_SPEED     1500
+#define MAX_STEP_SPEED     10000
+
+#define SPEED_SENSOR       11
 
 #define LCD_RS             16
 #define LCD_EN             17
@@ -31,7 +34,7 @@
 #define ENCODER_RIGHT_PIN  31    
 #define ENCODER_CLICK_PIN  35
 #define BUTTON_DEBOUNCE    10
-#define BUZZER             37
+#define BUZZER             -1 //37
 
 #define SDCARDDETECT       49
 #define SDCARDCS           53
@@ -43,16 +46,17 @@
 
 #define TEMP_INPUT_PIN_1   3
 #define TEMP_INPUT_PIN_2   4
+#define TEMP_INPUT_PIN_3   5
 #define TEMP_OUTPUT_PIN_1  8
 #define TEMP_OUTPUT_PIN_2  9
+#define TEMP_OUTPUT_PIN_3  10
 
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
 
-#define FAN_PIN_PWM        -1 //40 //D40
-#define FAN_PIN_TAC        -1 //3 //D3
-#define DEBOUNCE           0
-#define FANSTUCK_THRESHOLD 500
+#define FAN_PIN_PWM        6 //D40
+#define FAN_PIN_TAC        2 //D3
+
 
 struct Menu {
   int id = 0;
@@ -60,17 +64,17 @@ struct Menu {
   char label[16];
 };
 
-int flag_left = 0;
-int flag_right = 0;
-int flag_click = 0;
-int flag_temp = 0;
-int temp_update = 0;
-int buzzer_update = 0;
-int flag_fan = 0;
+volatile int flag_left = 0;
+volatile int flag_right = 0;
+volatile int flag_click = 0;
+volatile int flag_temp = 0;
+volatile int temp_update = 0;
+volatile int buzzer_update = 0;
+volatile int flag_fan = 0;
 
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
-int rpm_old = 0;
-int rpm_value = 0;
+volatile int rpm_old = 0;
+volatile int rpm_value = 0;
 
 LiquidCrystal lcd(LCD_RS,LCD_EN,LCD_PIN_1,LCD_PIN_2,LCD_PIN_3,LCD_PIN_4);
 int menu = 0;
@@ -87,10 +91,10 @@ Menu fan_speed;
 Menu* screen[MAX_MENU];
 
 int encoder_pos = 0;                     
-int encoder_turn_status_old = LOW;                 
-int encoder_turn_status = LOW;                                           
-int encoder_click_status = HIGH;
-int encoder_click_status_old = HIGH; 
+volatile int encoder_turn_status_old = LOW;                 
+volatile int encoder_turn_status = LOW;                                           
+volatile int encoder_click_status = HIGH;
+volatile int encoder_click_status_old = HIGH; 
 
 /*
  * Ku=250
@@ -101,13 +105,15 @@ int encoder_click_status_old = HIGH;
  * Kd=140
  * Kp=50
  */
-double Kd = 50;         
-double Kp = 25;         
-double Ki = 0.05;       
+double Kd = 40;         
+double Kp = 30;         
+double Ki = 0.5;       
 double set_point_1, input_1, output_1;
 PID temp_1(&input_1, &output_1, &set_point_1, Kp, Ki, Kd, DIRECT);
 double set_point_2, input_2, output_2;
 PID temp_2(&input_2, &output_2, &set_point_2, Kp, Ki, Kd, DIRECT);
+double set_point_3, input_3, output_3;
+PID temp_3(&input_3, &output_3, &set_point_3, Kp, Ki, Kd, DIRECT);
 int window_size = 5000;
 unsigned long window_start_time;
 
@@ -124,55 +130,64 @@ bool safety_stop = false;
 File database_file;
 File log_file;
 
-int fan_speed_value;
-unsigned long volatile ts1=0, ts2=0;
+unsigned long previousRPMMillis;
+unsigned long previousMillis;
+float RPM_fan;
+int state_fan = 0;
+unsigned long interval = 3000;
+volatile unsigned long pulses=0;
+unsigned long lastRPMmillis = 0;
+
+volatile unsigned long old_speed_time = 0;
+volatile unsigned long speed_time = 0;
+volatile int flag_speed = 0;
+volatile int detect_speed = 0;
+volatile int sensor_speed = 0;
+unsigned long test_count = 0;
 
 ///////////////////////////////////
 // FAN CONTROL
 ///////////////////////////////////
 void setupFan() {
-  pinMode(FAN_PIN_PWM, OUTPUT);
-  pinMode(FAN_PIN_TAC, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(FAN_PIN_TAC),tachISR,FALLING);
-  
-  noInterrupts();
-  TCCR4A = 0;
-  TCCR4B = 0;
-  TCNT4 = 0;
-  OCR4A = 1;
-  TCCR4B |= (1 << WGM12);
-  TCCR4B |= (1 << CS10) | (1 << CS11);
-  TIMSK4 |= (1 << OCIE4A);
-  interrupts();
+    TCCR4A = 0;
+    TCCR4B = 0;
+    TCNT4  = 0;
+
+    // Mode 10: phase correct PWM with ICR4 as Top (= F_CPU/2/25000)
+    // OC4C as Non-Inverted PWM output
+    ICR4   = (F_CPU/25000)/2;
+    OCR4A  = 0;                    // default: about 50:50
+    TCCR4A = _BV(COM4A1) | _BV(WGM41);
+    TCCR4B = _BV(WGM43) | _BV(CS40);
+
+    pinMode(FAN_PIN_TAC, INPUT_PULLUP); // Set pin to read the Hall Effect Sensor
+    attachInterrupt(digitalPinToInterrupt(FAN_PIN_TAC), countPulse, RISING); // Attach an interrupt to count
+
+    // Set the PWM pin as output.
+    pinMode( FAN_PIN_PWM, OUTPUT);
 }
 
-ISR(TIMER4_COMPA_vect) {
-  flag_fan++;
-  if (flag_fan >= 10) {
-    flag_fan = 0;
-  }
-
-  if (flag_fan < fan_speed_value) {
-    digitalWrite(FAN_PIN_PWM, HIGH);
-  }
-  else {
-    digitalWrite(FAN_PIN_PWM, LOW);
-  }
-}
-
-void tachISR() {
-  unsigned long m = millis();
-  if ((m-ts2) > DEBOUNCE) {
-    ts1=ts2;
-    ts2=m;
-  }
+void countPulse() {
+  pulses++;
+  flag_fan = 1;
 }
 
 unsigned long calcRPM() {
-  if(millis()-ts2<FANSTUCK_THRESHOLD && ts2!=0) {
-    return (60000/(ts2-ts1))/2;
-  }
-  else return 0;
+  unsigned long RPM_fan;
+  noInterrupts();
+  float elapsedMS = (millis() - lastRPMmillis)/1000.0;
+  unsigned long revolutions = pulses/2;
+  float revPerMS = revolutions / elapsedMS;
+  RPM_fan = revPerMS * 60.0;
+  lastRPMmillis = millis();
+  pulses=0;
+  interrupts();
+
+  return RPM_fan;
+}
+
+void writeFanRPM(int value) {
+  OCR4A = value*320/10;
 }
 
 //////////////////////////////////
@@ -267,11 +282,25 @@ void saveConfig(double Kp, double Ki, double Kd) {
   database_file.close();
 }
 
-void logSD(int temp_nozzle, int temp_pre) {
+void logSD(int temp_nozzle, int temp_pre, int temp_pre_2) {
   log_file.print("Nozzle temp: ");
   log_file.print(temp_nozzle);
   log_file.print(" / Preheat temp: ");
-  log_file.println(temp_pre);
+  log_file.print(temp_pre);
+  log_file.print(" / Preheat temp 2: ");
+  log_file.println(temp_pre_2);
+  log_file.flush();
+}
+
+void logSDMotor(int motor) {
+  log_file.print("Motor speed: ");
+  log_file.println(motor);
+  log_file.flush();
+}
+
+void logSDFan(int fan) {
+  log_file.print("Fan speed: ");
+  log_file.println(fan);
   log_file.flush();
 }
 /////////////////////////////////////////////
@@ -326,14 +355,17 @@ void setupLCD() {
    menu_old = 0;
 }
 
-void setupLCDTune() {
-  setupLCD();
+void initAutoTunePID() {
   lcd.setCursor(0,0);
   lcd.print("Tuning heat bands...");
   lcd.setCursor(0,1);
-  lcd.print("  Setting to 100oC  ");
+  lcd.print("  Setting to "); 
+  lcd.print((THRESHHOLD_HIGH+THRESHHOLD_LOW)/2); 
+  lcd.print("oC  ");
   lcd.setCursor(0,2);
-  lcd.print("Kp=    Kd=    Ki=    ");
+  lcd.print("P=   D=    I=       ");
+  lcd.setCursor(0,3);
+  lcd.print("Temperature: ");
 }
 
 void right() {
@@ -353,8 +385,8 @@ void left() {
       menu--;
   }
   else {
-    if (screen[menu]->value > 0)
-      screen[menu]->value--;
+    //if (screen[menu]->value > 0)
+    screen[menu]->value--;
   } 
   updateScreen();
 }
@@ -441,19 +473,21 @@ void updateValue() {
       motor.enableOutputs();
     rpm_value = rpm.value;
     rpm_current.value = rpm_value;
-    lcd.setCursor(17, 1);
-    lcd.print("   ");
-    lcd.setCursor(17, 1);
-    lcd.print(screen[menu]->value);
+    if (rpm_value == 0) {
+      sensor_speed = 0;
+      updateSpeed();
+    }
   }
   else if (menu == 0) {
     set_point_1 = temperature_nozzle.value;
   }
   else if (menu == 1) {
     set_point_2 = temperature_preheat.value;
+    set_point_3 = temperature_preheat.value;
   }
   else if (menu == 2) {
-    fan_speed_value = fan_speed.value;
+    state_fan = fan_speed.value;
+    writeFanRPM(state_fan);
   }
 }
 
@@ -491,6 +525,13 @@ void updateScreen() {
   menu_level_old = menu_level;
 }
 
+void updateSpeed() {
+  lcd.setCursor(17, 1);
+  lcd.print("   ");
+  lcd.setCursor(17, 1);
+  lcd.print((int)sensor_speed);
+}
+
 void updateTemperature() {
   lcd.setCursor(17, 2);
   lcd.print("   ");
@@ -503,14 +544,25 @@ void updateTemperature() {
   else
     lcd.print(999);
   
-  lcd.setCursor(17, 3);
+  lcd.setCursor(13, 3);
   lcd.print("   ");
-  lcd.setCursor(17, 3);
+  lcd.setCursor(13, 3);
   if (input_2 <= 0) {
     lcd.print(0);
   }
   else if (input_2 < 1000)
     lcd.print((int)input_2);
+  else
+    lcd.print(999);
+
+  lcd.setCursor(16, 3);
+  lcd.print("/");
+  lcd.setCursor(17, 3);
+  if (input_3 <= 0) {
+    lcd.print(0);
+  }
+  else if (input_3 < 1000)
+    lcd.print((int)input_3);
   else
     lcd.print(999);
 }
@@ -613,19 +665,26 @@ ISR(TIMER2_COMPA_vect) {
 void setupTemp() {
   pinMode(TEMP_OUTPUT_PIN_1, OUTPUT);
   pinMode(TEMP_OUTPUT_PIN_2, OUTPUT);
+  pinMode(TEMP_OUTPUT_PIN_3, OUTPUT);
 
-  pinMode(TEMP_INPUT_PIN_1, INPUT);
   pinMode(TEMP_INPUT_PIN_2, INPUT);
+  pinMode(TEMP_INPUT_PIN_3, INPUT);
+
+  pinMode(TUNE_PIN, INPUT_PULLUP);
+  pinMode(AUTOTUNE_PIN, INPUT_PULLUP);
 
   window_start_time = millis();
   set_point_1 = 25;
   set_point_2 = 25;
+  set_point_3 = 25;
 
   temp_1.SetOutputLimits(0, window_size);
   temp_2.SetOutputLimits(0, window_size);
+  temp_3.SetOutputLimits(0, window_size);
 
   temp_1.SetMode(AUTOMATIC);
   temp_2.SetMode(AUTOMATIC);
+  temp_3.SetMode(AUTOMATIC);
 
   noInterrupts();
   TCCR3A = 0;
@@ -637,126 +696,16 @@ void setupTemp() {
   TIMSK3 |= (1 << OCIE3A);
   interrupts();
 
+  if(digitalRead(AUTOTUNE_PIN) == LOW) {
+    autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1);
+  }
   if(digitalRead(TUNE_PIN) == LOW) {
-    /*double D, A, Pu, Ku;
-    while(!autoTune(TEMP_INPUT_PIN_1, TEMP_OUTPUT_PIN_1, THRESHHOLD_LOW, THRESHHOLD_HIGH, 1));
-    D = 120/2;
-    A = abs_max - abs_min;
-    Pu = abs_max_time_2 - abs_max_time_1;
-    Ku = 4*D/(3.14159*A);
-    Kp = 50*0.6*Ku;
-    Ki = 100*1.2*Ku/Pu;
-    Kd = 0.01*0.075*Ku*Pu;
-    lcd.setCursor(3,2);
-    if (Kp < 10) {
-      lcd.print("  "); 
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 1000)
-      lcd.print((int)Kp);
-    else
-      lcd.print((int)Kp);
-    
-    lcd.setCursor(10,2);
-    if (Kd < 10) {
-      lcd.print("  ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 1000)
-      lcd.print((int)Kd);
-    else
-      lcd.print((int)Kd);
-      
-    lcd.setCursor(17,2);
-    if (Ki < 10) {
-      lcd.print("  ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 100) {
-      lcd.print(" ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 1000)
-      lcd.print((int)Ki);
-    else
-      lcd.print((int)Ki);
-    delay(30000);
-    temp_1.SetTunings(Kp, Ki, Kd);
-    lcd.setCursor(0,2);
-    lcd.print("Kp=    Kd=    Ki=    ");
-  
-    abs_max = 100;
-    abs_min = 100;
-    abs_max_time_1 = 0;
-    abs_min_time_1 = 0;
-    abs_max_time_2 = 0;
-    abs_min_time_2 = 0;
-    init_tuning = 0;
-  
-    while(!autoTune(TEMP_INPUT_PIN_2, TEMP_OUTPUT_PIN_2, THRESHHOLD_LOW, THRESHHOLD_HIGH, 2));
-    D = 120/2;
-    A = abs_max - abs_min;
-    Pu = abs_min_time_2 - abs_min_time_1;
-    Ku = 4*D/(3.14159*A);
-    Kp = 50*0.6*Ku;
-    Ki = 100*1.2*Ku/Pu; //284
-    Kd = 0.00025*0.075*Ku*Pu;  //0
-      lcd.setCursor(4,2);
-    if (Kp < 10) {
-      lcd.print("  ");
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kp);
-    }
-    else if (Kp < 1000)
-      lcd.print((int)Kp);
-    else
-      lcd.print((int)Kp);
-    
-    lcd.setCursor(11,2);
-    if (Kd < 10) {
-      lcd.print("  ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 100) {
-      lcd.print(" ");
-      lcd.print((int)Kd);
-    }
-    else if (Kd < 1000)
-      lcd.print((int)Kd);
-    else
-      lcd.print((int)Kd);
-      
-    lcd.setCursor(18,2);
-    if (Ki < 10) {
-      lcd.print("  ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 100) {
-      lcd.print(" ");
-      lcd.print((int)Ki);
-    }
-    else if (Ki < 1000)
-      lcd.print((int)Ki);
-    else
-      lcd.print((int)Ki);
-    delay(30000);
-    temp_2.SetTunings(Kp, Ki, Kd);*/
     tunePID();
   }
   else {
     temp_1.SetTunings(Kp,Ki,Kd);
     temp_2.SetTunings(Kp,Ki,Kd);
+    temp_3.SetTunings(Kp,Ki,Kd);
     Serial.println(Kp);
     Serial.println(Ki);
     Serial.println(Kd);
@@ -772,6 +721,7 @@ ISR(TIMER3_COMPA_vect) {
 bool tunePID() {
   set_point_1 = 100;
   set_point_2 = 50;
+  set_point_3 = 50;
   init_tuning = 0;
   initTunePID();
   while(init_tuning < 3) {
@@ -793,8 +743,11 @@ bool tunePID() {
       input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
       input_2 = analogRead(TEMP_INPUT_PIN_2);
       input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+      input_3 = analogRead(TEMP_INPUT_PIN_3);
+      input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
       temp_1.Compute();
       temp_2.Compute();
+      temp_3.Compute();
     
       unsigned long now = millis();
       if (now - window_start_time > window_size) {
@@ -802,7 +755,7 @@ bool tunePID() {
       }   
   
       ////////////////AUTOMATIC SAFETY/////////////////////////
-      if (input_1 > 450 || input_2 > 450 || safety_stop) {
+      if (input_1 > 450 || input_2 > 450 || input_3 > 450 || safety_stop || input_1 < 0 || input_2 < 0 || input_3 < 0) {
         output_1 = 0;
         output_2 = 0;
         if (!safety_stop) {
@@ -811,7 +764,7 @@ bool tunePID() {
           safety_stop = true;
         }
       }
-      if (input_1 < 50 && input_2 < 50 && safety_stop) {
+      if (input_1 < 50 && input_2 < 50 && input_3 < 50 && safety_stop && input_1 > 0 && input_2 > 0 && input_3 > 0){
         digitalWrite(BUZZER, LOW);
         setupLCD();
         safety_stop = false;
@@ -821,17 +774,21 @@ bool tunePID() {
       else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
       if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
       else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
-  
+      if (output_3 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_3, HIGH);
+      else digitalWrite(TEMP_OUTPUT_PIN_3, LOW);
+        
       if (temp_update >= 2500 && !safety_stop) {
         updateTemperature();
         Serial.print(input_1);
         Serial.print(" ");
-        Serial.println(input_2);
+        Serial.print(input_2);
+        Serial.print(" ");
+        Serial.println(input_3);
         temp_update = 0;
       }
   
       if (buzzer_update >= 2500 && !safety_stop) {
-        if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20) {
+        if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20 || input_3 > set_point_3 + 20) {
           digitalWrite(BUZZER, !digitalRead(BUZZER));
         }
         else {
@@ -844,83 +801,142 @@ bool tunePID() {
         updateSafety();
         temp_update = 0;
       }
-      
       flag_temp = 0;
     }
   }
   saveConfig(Kp, Ki, Kd);
   set_point_1 = 25;
   set_point_2 = 25;
+  set_point_3 = 25;
 }
 
-bool autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
-  
-  Serial.print("LOOP ");
-  Serial.print(flag_temp);
-  Serial.print("\n");
-  if (flag_temp == 1) {
-    if (temp_update >= 2500) {
-      updateTemperatureTune(id, input_1);
-      temp_update = 0;
-    }
-    input_1 = analogRead(input_pin);
-    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
-
-    if (input_1 > thresh_high) {
-      digitalWrite(output_pin, LOW);
-      if (init_tuning == 0)
-        init_tuning = 1;
-      else if (init_tuning == 2)
-        init_tuning = 3;
-      else if (init_tuning == 4)
-        init_tuning = 5;
-    }
-    else if (input_1 < thresh_low) {
-      digitalWrite(output_pin, HIGH);
-      if (init_tuning == 1)
-        init_tuning = 2;
-      else if (init_tuning == 3)
-        init_tuning = 4;
-      else if (init_tuning == 5) {
-        digitalWrite(output_pin, LOW);
-        return true;
+void autoTune(int input_pin, int output_pin, int thresh_low, int thresh_high, int id) {
+  initAutoTunePID();
+  while (1) {
+    if (flag_temp == 1) {
+      if (temp_update >= 2500) {
+        updateTemperatureTune(init_tuning, input_1);
+        temp_update = 0;
       }
+      input_1 = analogRead(input_pin);
+      input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+  
+      if (input_1 > thresh_high) {
+        digitalWrite(output_pin, LOW);
+        if (init_tuning == 0)
+          init_tuning = 1;
+        else if (init_tuning == 2)
+          init_tuning = 3;
+        else if (init_tuning == 4)
+          init_tuning = 5;
+      }
+      else if (input_1 < thresh_low) {
+        digitalWrite(output_pin, HIGH);
+        if (init_tuning == 1)
+          init_tuning = 2;
+        else if (init_tuning == 3)
+          init_tuning = 4;
+        else if (init_tuning == 5) {
+          digitalWrite(output_pin, LOW);
+          break;
+        }
+      }
+  
+      if (input_1 >= abs_max && init_tuning == 3) {
+        abs_max = input_1;
+        abs_max_time_1 = millis(); 
+      }
+      
+      if (input_1 < abs_min && init_tuning == 2) {
+        abs_min = input_1;
+        abs_min_time_1 = millis();
+      }
+  
+      if (input_1 >= abs_max && init_tuning == 5) {
+        abs_max = input_1;
+        abs_max_time_2 = millis(); 
+      }
+      
+      if (input_1 < abs_min && init_tuning == 4) {
+        abs_min = input_1;
+        abs_min_time_2 = millis();
+      }
+      flag_temp = 0;
     }
-
-    if (input_1 >= abs_max && init_tuning == 3) {
-      abs_max = input_1;
-      abs_max_time_1 = millis(); 
-    }
-    
-    if (input_1 < abs_min && init_tuning == 2) {
-      abs_min = input_1;
-      abs_min_time_1 = millis();
-    }
-
-    if (input_1 >= abs_max && init_tuning == 5) {
-      abs_max = input_1;
-      abs_max_time_2 = millis(); 
-    }
-    
-    if (input_1 < abs_min && init_tuning == 4) {
-      abs_min = input_1;
-      abs_min_time_2 = millis();
-    }
-    flag_temp = 0;
   }
-  return false;
+  double D, A, Pu, Ku;
+  D = 120/2;
+  A = abs_max - abs_min;
+  Pu = abs_min_time_2 - abs_min_time_1;
+  Ku = 4*D/(3.14159*A);
+  Kp = 15*0.6*Ku;
+  Kd = 0.008*0.0033*0.0015*0.075*Ku*Pu;
+  Ki = 7.15*10*1000*7.15*1000*1.2*Ku/Pu;
+  lcd.setCursor(2,2);
+  lcd.print((int)Kp);
+  
+  lcd.setCursor(7,2);
+  lcd.print((int)Kd);
+    
+  lcd.setCursor(13,2);
+  lcd.print(Ki);
+  while(temp_update < 100000);
+  temp_update = 0;
+  temp_1.SetTunings(Kp, Ki, Kd);
+  temp_2.SetTunings(Kp, Ki, Kd);
+  temp_3.SetTunings(Kp, Ki, Kd);
+  saveConfig(Kp, Ki, Kd);
 }
 //////////////////////////////////////////////
+
+/////////////////////////////////////////////
+// Speed reader
+/////////////////////////////////////////////
+void setupSpeedSensor() {
+  pinMode(SPEED_SENSOR, INPUT);
+  
+  noInterrupts();
+  TCCR5A = 0;
+  TCCR5B = 0;
+  TCNT5 = 0;
+  OCR5A = 1;
+  TCCR5B |= (1 << WGM12);
+  TCCR5B |= (1 << CS12) | (1 << CS10);
+  TIMSK5 |= (1 << OCIE5A);
+  interrupts();
+}
+
+ISR(TIMER5_COMPA_vect) {
+  if (digitalRead(SPEED_SENSOR) == LOW && detect_speed == 0) {
+    old_speed_time = speed_time;
+    speed_time = millis();
+    detect_speed = 1;
+    if (rpm_value < 0)
+      sensor_speed = -1*60/((float)speed_time/1000 - (float) old_speed_time/1000)/18.0;
+    else
+      sensor_speed = 60/((float)speed_time/1000 - (float) old_speed_time/1000)/18.0;
+  } 
+  else if (digitalRead(SPEED_SENSOR) == HIGH && detect_speed == 1) {
+    detect_speed = 0;
+  }
+  flag_speed++;
+}
+
+////////////////////////////////////////////
 
 void setup() {
   Serial.begin(9600);
   setupSD();
-  setupLCDTune();
+  setupMotorInit();
+  setupFan();
+  setupLCD();
   setupEncoder();
   setupTemp();
   setupLCD();
-  setupMotorInit();
   setupMotorTimer();
+  setupSpeedSensor();
+  //pinMode(4, OUTPUT);
+  //digitalWrite(4, HIGH);
 }
 
 void loop() {
@@ -943,8 +959,11 @@ void loop() {
     input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
     input_2 = analogRead(TEMP_INPUT_PIN_2);
     input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+    input_3 = analogRead(TEMP_INPUT_PIN_3);
+    input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
     temp_1.Compute();
     temp_2.Compute();
+    temp_3.Compute();
   
     unsigned long now = millis();
     if (now - window_start_time > window_size) {
@@ -952,16 +971,17 @@ void loop() {
     }   
 
     ////////////////AUTOMATIC SAFETY/////////////////////////
-    if (input_1 > 450 || input_2 > 450 || safety_stop) {
+    if (input_1 > 450 || input_2 > 450 || input_3 > 450 || safety_stop || input_1 < 0 || input_2 < 0 || input_3 < 0) {
       output_1 = 0;
       output_2 = 0;
+      output_3 = 0;
       if (!safety_stop) {
         digitalWrite(BUZZER, HIGH);
         initSafety();
         safety_stop = true;
       }
     }
-    if (input_1 < 50 && input_2 < 50 && safety_stop) {
+    if (input_1 < 50 && input_2 < 50 && input_3 < 50 && safety_stop && input_1 > 0 && input_2 > 0 && input_3 > 0) {
       digitalWrite(BUZZER, LOW);
       setupLCD();
       safety_stop = false;
@@ -971,19 +991,21 @@ void loop() {
     else digitalWrite(TEMP_OUTPUT_PIN_1, LOW);
     if (output_2 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_2, HIGH);
     else digitalWrite(TEMP_OUTPUT_PIN_2, LOW);
+    if (output_3 > now - window_start_time) digitalWrite(TEMP_OUTPUT_PIN_3, HIGH);
+    else digitalWrite(TEMP_OUTPUT_PIN_3, LOW);
 
     if (temp_update >= 2500 && !safety_stop) {
       updateTemperature();
       Serial.print(input_1);
       Serial.print(" ");
-      Serial.println(input_2);
-      logSD(input_1, input_2);
+      Serial.print(input_2);
+      Serial.print(" ");
+      Serial.println(input_3);
+      logSD(input_1, input_2, input_3);
       temp_update = 0;
-    }
 
-    if (buzzer_update >= 2500 && !safety_stop) {
-      if (input_1 > set_point_1 + 20) {
-        digitalWrite(BUZZER, LOW); //digitalWrite(BUZZER, !digitalRead(BUZZER));
+      if (input_1 > set_point_1 + 20 || input_2 > set_point_2 + 20 || input_3 > set_point_3 + 20) {
+        digitalWrite(BUZZER, !digitalRead(BUZZER));
       }
       else {
         digitalWrite(BUZZER, LOW);
@@ -991,11 +1013,38 @@ void loop() {
       buzzer_update = 0;
     }
         
-    else if(temp_update >= 1000 && safety_stop) {
+    else if(temp_update >= 2500 && safety_stop) {
+      Serial.print("Temperatures: ");
+      Serial.print(input_1);
+      Serial.print(" ");
+      Serial.print(input_2);
+      Serial.print(" ");
+      Serial.println(input_3);
       updateSafety();
       temp_update = 0;
     }
-    
     flag_temp = 0;
+  }
+
+  if (millis() - previousMillis > interval) {
+    int fan_s = calcRPM();
+    Serial.print("Fan speed: ");
+    Serial.print(fan_s);
+    Serial.print(F(" @ LEVEL="));
+    Serial.println(state_fan);
+    logSDFan(fan_s);
+    previousMillis = millis(); 
+  }
+
+  if (flag_speed >= 5000) {
+    Serial.print("Motor speed: ");
+    Serial.println(sensor_speed);
+    logSDMotor(sensor_speed);
+    updateSpeed();
+    flag_speed = 0;
+  }
+  if ((millis() - old_speed_time) > 3332) {
+    sensor_speed = 0;
+    old_speed_time = millis();
   }
 }
