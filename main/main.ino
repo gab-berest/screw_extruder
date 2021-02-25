@@ -230,21 +230,21 @@ void setupMotorInit() {
   motor.setMaxSpeed(MAX_STEP_SPEED);
   motor.setSpeed(calculateSpeed(rpm_value));
 
-  winder.setEnablePin(WINDER_ENABLE_PIN);
-  winder.setPinsInverted(false, false, true);
-  winder.disableOutputs();
-  winder.setMaxSpeed(MAX_WINDER_SPEED);
-  winder.setSpeed(calculateWinder(rpm_value));
+  //winder.setEnablePin(WINDER_ENABLE_PIN);
+  //winder.setPinsInverted(false, false, true);
+  //winder.disableOutputs();
+  //winder.setMaxSpeed(MAX_WINDER_SPEED);
+  //winder.setSpeed(calculateWinder(rpm_value));
 }
 
 ISR(TIMER1_COMPA_vect) {
   if (rpm_old != rpm_value) {
     motor.setSpeed(calculateSpeed(rpm_value));
-    winder.setSpeed(calculateWinder(rpm_value));
+    //winder.setSpeed(calculateWinder(rpm_value));
     rpm_old = rpm_value;
   }
   motor.runSpeed();
-  winder.runSpeed();
+  //winder.runSpeed();
 }
 //////////////////////////////////////////////
 
@@ -489,11 +489,11 @@ void updateValue() {
   if (menu == 3) {
     if (rpm.value == 0) {
       motor.disableOutputs();
-      winder.disableOutputs();
+      //winder.disableOutputs();
     }
     else {
       motor.enableOutputs();
-      winder.enableOutputs();
+      //winder.enableOutputs();
     }
     rpm_value = rpm.value;
     rpm_current.value = rpm_value;
