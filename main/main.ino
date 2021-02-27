@@ -18,12 +18,12 @@
 
 #define SPEED_SENSOR       11
 
-#define WINDER_STEP_PIN    -1 //36
-#define WINDER_DIR_PIN     -1 //34
-#define WINDER_ENABLE_PIN  -1 //30
+#define WINDER_STEP_PIN    36
+#define WINDER_DIR_PIN     34
+#define WINDER_ENABLE_PIN  30
 #define WINDER_ACCURACY    1
 #define GEARBOX            1
-#define MAX_WINDER_SPEED   1
+#define MAX_WINDER_SPEED   10000
 
 #define LCD_RS             16
 #define LCD_EN             17
@@ -230,17 +230,17 @@ void setupMotorInit() {
   motor.setMaxSpeed(MAX_STEP_SPEED);
   motor.setSpeed(calculateSpeed(rpm_value));
 
-  //winder.setEnablePin(WINDER_ENABLE_PIN);
-  //winder.setPinsInverted(false, false, true);
-  //winder.disableOutputs();
-  //winder.setMaxSpeed(MAX_WINDER_SPEED);
-  //winder.setSpeed(calculateWinder(rpm_value));
+  winder.setEnablePin(WINDER_ENABLE_PIN);
+  winder.setPinsInverted(false, false, true);
+  winder.disableOutputs();
+  winder.setMaxSpeed(MAX_WINDER_SPEED);
+  winder.setSpeed(calculateWinder(rpm_value));
 }
 
 ISR(TIMER1_COMPA_vect) {
   if (rpm_old != rpm_value) {
     motor.setSpeed(calculateSpeed(rpm_value));
-    //winder.setSpeed(calculateWinder(rpm_value));
+    winder.setSpeed(calculateWinder(rpm_value));
     rpm_old = rpm_value;
   }
   motor.runSpeed();
@@ -489,11 +489,11 @@ void updateValue() {
   if (menu == 3) {
     if (rpm.value == 0) {
       motor.disableOutputs();
-      //winder.disableOutputs();
+      winder.disableOutputs();
     }
     else {
       motor.enableOutputs();
-      //winder.enableOutputs();
+      winder.enableOutputs();
     }
     rpm_value = rpm.value;
     rpm_current.value = rpm_value;
@@ -980,11 +980,11 @@ void loop() {
 
   if (flag_temp == 1) {
     input_1 = analogRead(TEMP_INPUT_PIN_1);
-    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
+    input_1 = 0;//((input_1*5.0/1024.0)-1.25)/0.005;
     input_2 = analogRead(TEMP_INPUT_PIN_2);
-    input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
+    input_2 = 0;//((input_2*5.0/1024.0)-1.25)/0.005;
     input_3 = analogRead(TEMP_INPUT_PIN_3);
-    input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
+    input_3 = 0;//((input_3*5.0/1024.0)-1.25)/0.005;
     temp_1.Compute();
     temp_2.Compute();
     temp_3.Compute();
