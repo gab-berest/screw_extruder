@@ -22,7 +22,7 @@
 #define WINDER_DIR_PIN     34
 #define WINDER_ENABLE_PIN  30
 #define WINDER_ACCURACY    1
-#define GEARBOX            1
+#define WINDER_GEARBOX     1
 #define MAX_WINDER_SPEED   10000
 
 #define LCD_RS             16
@@ -220,7 +220,7 @@ int calculateSpeed(float set_rpm) {
 }
 
 int calculateWinder(float set_rpm) {
-  return (360.0/1.8*WINDER_ACCURACY)*set_rpm/60.0*GEARBOX;
+  return (360.0/1.8*WINDER_ACCURACY)*set_rpm/60.0*WINDER_GEARBOX;
 }
 
 void setupMotorInit() {
@@ -244,7 +244,7 @@ ISR(TIMER1_COMPA_vect) {
     rpm_old = rpm_value;
   }
   motor.runSpeed();
-  //winder.runSpeed();
+  winder.runSpeed();
 }
 //////////////////////////////////////////////
 
