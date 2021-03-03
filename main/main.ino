@@ -35,7 +35,7 @@
 #define LCD_HEIGHT         4
 
 #define MAX_MENU           8
-#define SETTING_MENU       4
+#define SETTING_MENU       5
 
 #define ENCODER_LEFT_PIN   33
 #define ENCODER_RIGHT_PIN  31    
@@ -243,8 +243,10 @@ void setupMotorInit() {
 ISR(TIMER1_COMPA_vect) {
   if (rpm_old != rpm_value) {
     motor.setSpeed(calculateSpeed(rpm_value));
-    winder.setSpeed(calculateWinder(winder_rpm_value));
     rpm_old = rpm_value;
+  }
+  if (winder_rpm_old != winder_rpm_value) {
+    winder.setSpeed(calculateWinder(winder_rpm_value));
     winder_rpm_old = winder_rpm_value;
   }
   motor.runSpeed();
@@ -360,7 +362,7 @@ void setupLCD() {
   strcpy(fan_speed.label, "FAN SPEED:");
   winder_speed.id = 7;
   winder_speed.value = 0;
-  strcpy(fan_speed.label, "WINDER SPEED:");
+  strcpy(winder_speed.label, "WINDER SPEED:");
 
   screen[4] = &rpm;
   screen[5] = &rpm_current;
@@ -369,7 +371,7 @@ void setupLCD() {
   screen[0] = &temperature_nozzle;
   screen[1] = &temperature_preheat;
   screen[2] = &fan_speed;
-  screen[3] = &fan_speed;
+  screen[3] = &winder_speed;
   
   for (int i = 4; i < MAX_MENU; i++) {
     lcd.setCursor(0, i-4);
