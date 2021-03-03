@@ -34,7 +34,7 @@
 #define LCD_WIDTH          20
 #define LCD_HEIGHT         4
 
-#define MAX_MENU           7
+#define MAX_MENU           8
 #define SETTING_MENU       4
 
 #define ENCODER_LEFT_PIN   33
@@ -83,6 +83,8 @@ AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
 volatile int rpm_old = 0;
 volatile int rpm_value = 0;
 AccelStepper winder = AccelStepper(AccelStepper::DRIVER, WINDER_STEP_PIN, WINDER_DIR_PIN);
+volatile int winder_rpm_old = 0;
+volatile int winder_rpm_value = 0;
 
 LiquidCrystal lcd(LCD_RS,LCD_EN,LCD_PIN_1,LCD_PIN_2,LCD_PIN_3,LCD_PIN_4);
 int menu = 0;
@@ -96,6 +98,7 @@ Menu temperature_current_nozzle;
 Menu temperature_current_preheat;
 Menu temperature_preheat;
 Menu fan_speed;
+Menu winder_speed;
 Menu* screen[MAX_MENU];
 
 int encoder_pos = 0;                     
@@ -234,14 +237,15 @@ void setupMotorInit() {
   winder.setPinsInverted(false, false, true);
   winder.disableOutputs();
   winder.setMaxSpeed(MAX_WINDER_SPEED);
-  winder.setSpeed(calculateWinder(rpm_value));
+  winder.setSpeed(calculateWinder(winder_rpm_value));
 }
 
 ISR(TIMER1_COMPA_vect) {
   if (rpm_old != rpm_value) {
     motor.setSpeed(calculateSpeed(rpm_value));
-    winder.setSpeed(calculateWinder(rpm_value));
+    winder.setSpeed(calculateWinder(winder_rpm_value));
     rpm_old = rpm_value;
+    winder_rpm_old = winder_rpm_value;
   }
   motor.runSpeed();
   winder.runSpeed();
@@ -354,21 +358,25 @@ void setupLCD() {
   fan_speed.id = 6;
   fan_speed.value = 0;
   strcpy(fan_speed.label, "FAN SPEED:");
+  winder_speed.id = 7;
+  winder_speed.value = 0;
+  strcpy(fan_speed.label, "WINDER SPEED:");
 
-  screen[3] = &rpm;
-  screen[4] = &rpm_current;
-  screen[5] = &temperature_current_nozzle;
-  screen[6] = &temperature_current_preheat;
+  screen[4] = &rpm;
+  screen[5] = &rpm_current;
+  screen[6] = &temperature_current_nozzle;
+  screen[7] = &temperature_current_preheat;
   screen[0] = &temperature_nozzle;
   screen[1] = &temperature_preheat;
   screen[2] = &fan_speed;
+  screen[3] = &fan_speed;
   
-  for (int i = 3; i < MAX_MENU; i++) {
-    lcd.setCursor(0, i-3);
-     if (i == 3)
+  for (int i = 4; i < MAX_MENU; i++) {
+    lcd.setCursor(0, i-4);
+     if (i == 4)
       lcd.print(">");
      lcd.print(screen[i]->label);
-     lcd.setCursor(17, i-3);
+     lcd.setCursor(17, i-4);
      lcd.print(screen[i]->value);
   }
    menu = 0;
@@ -421,6 +429,7 @@ void click() {
   }
   updateScreen();
 }
+
 void rightTune() {
   if (init_tuning == 0 || init_tuning == 3) {
     Kp++;
@@ -487,16 +496,21 @@ void clickTune() {
 
 void updateValue() {
   if (menu == 3) {
+    if (winder_speed.value == 0)
+      winder.disableOutputs();
+    else
+      winder.enableOutputs();
+    winder_rpm_value = winder_speed.value;
+  }
+  if (menu == 4) {
     if (rpm.value == 0) {
       motor.disableOutputs();
-      winder.disableOutputs();
     }
     else {
       motor.enableOutputs();
-      winder.enableOutputs();
     }
     rpm_value = rpm.value;
-    rpm_current.value = rpm_value;
+    //rpm_current.value = rpm_value;
     if (rpm_value == 0) {
       sensor_speed = 0;
       updateSpeed();
