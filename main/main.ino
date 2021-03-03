@@ -580,7 +580,7 @@ void updateTemperature() {
     lcd.print(999);
 
   lcd.setCursor(16, 3);
-  lcd.print("/");
+  lcd.print("/   ");
   lcd.setCursor(17, 3);
   if (input_3 <= 0) {
     lcd.print(0);
@@ -980,11 +980,11 @@ void loop() {
 
   if (flag_temp == 1) {
     input_1 = analogRead(TEMP_INPUT_PIN_1);
-    input_1 = 0;//((input_1*5.0/1024.0)-1.25)/0.005;
+    input_1 = ((input_1*5.0/1024.0)-1.25)/0.005;
     input_2 = analogRead(TEMP_INPUT_PIN_2);
-    input_2 = 0;//((input_2*5.0/1024.0)-1.25)/0.005;
+    input_2 = ((input_2*5.0/1024.0)-1.25)/0.005;
     input_3 = analogRead(TEMP_INPUT_PIN_3);
-    input_3 = 0;//((input_3*5.0/1024.0)-1.25)/0.005;
+    input_3 = ((input_3*5.0/1024.0)-1.25)/0.005;
     temp_1.Compute();
     temp_2.Compute();
     temp_3.Compute();
