@@ -18,6 +18,13 @@
 
 #define SPEED_SENSOR       11
 
+#define WINDER_STEP_PIN    36
+#define WINDER_DIR_PIN     34
+#define WINDER_ENABLE_PIN  30
+#define WINDER_ACCURACY    1
+#define WINDER_GEARBOX     1
+#define MAX_WINDER_SPEED   10000
+
 #define LCD_RS             16
 #define LCD_EN             17
 #define LCD_PIN_1          23
@@ -27,8 +34,8 @@
 #define LCD_WIDTH          20
 #define LCD_HEIGHT         4
 
-#define MAX_MENU           7
-#define SETTING_MENU       4
+#define MAX_MENU           8
+#define SETTING_MENU       5
 
 #define ENCODER_LEFT_PIN   33
 #define ENCODER_RIGHT_PIN  31    
@@ -54,8 +61,8 @@
 #define THRESHHOLD_HIGH    102
 #define THRESHHOLD_LOW     98
 
-#define FAN_PIN_PWM        6 //D40
-#define FAN_PIN_TAC        2 //D3
+#define FAN_PIN_PWM        6
+#define FAN_PIN_TAC        2
 
 
 struct Menu {
@@ -75,6 +82,9 @@ volatile int flag_fan = 0;
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
 volatile int rpm_old = 0;
 volatile int rpm_value = 0;
+AccelStepper winder = AccelStepper(AccelStepper::DRIVER, WINDER_STEP_PIN, WINDER_DIR_PIN);
+volatile int winder_rpm_old = 0;
+volatile int winder_rpm_value = 0;
 
 LiquidCrystal lcd(LCD_RS,LCD_EN,LCD_PIN_1,LCD_PIN_2,LCD_PIN_3,LCD_PIN_4);
 int menu = 0;
@@ -88,6 +98,7 @@ Menu temperature_current_nozzle;
 Menu temperature_current_preheat;
 Menu temperature_preheat;
 Menu fan_speed;
+Menu winder_speed;
 Menu* screen[MAX_MENU];
 
 int encoder_pos = 0;                     
@@ -211,12 +222,22 @@ int calculateSpeed(float set_rpm) {
   return (360.0/1.8*STEP_ACCURACY)*set_rpm/60.0*GEARBOX;
 }
 
+int calculateWinder(float set_rpm) {
+  return (360.0/1.8*WINDER_ACCURACY)*set_rpm/60.0*WINDER_GEARBOX;
+}
+
 void setupMotorInit() {
   motor.setEnablePin(E_ENABLE_PIN);
   motor.setPinsInverted(false, false, true); //invert logic of enable pin
   motor.disableOutputs();
   motor.setMaxSpeed(MAX_STEP_SPEED);
-  motor.setSpeed(calculateSpeed(rpm_value));  
+  motor.setSpeed(calculateSpeed(rpm_value));
+
+  winder.setEnablePin(WINDER_ENABLE_PIN);
+  winder.setPinsInverted(false, false, true);
+  winder.disableOutputs();
+  winder.setMaxSpeed(MAX_WINDER_SPEED);
+  winder.setSpeed(calculateWinder(winder_rpm_value));
 }
 
 ISR(TIMER1_COMPA_vect) {
@@ -224,7 +245,12 @@ ISR(TIMER1_COMPA_vect) {
     motor.setSpeed(calculateSpeed(rpm_value));
     rpm_old = rpm_value;
   }
+  if (winder_rpm_old != winder_rpm_value) {
+    winder.setSpeed(calculateWinder(winder_rpm_value));
+    winder_rpm_old = winder_rpm_value;
+  }
   motor.runSpeed();
+  winder.runSpeed();
 }
 //////////////////////////////////////////////
 
@@ -334,21 +360,25 @@ void setupLCD() {
   fan_speed.id = 6;
   fan_speed.value = 0;
   strcpy(fan_speed.label, "FAN SPEED:");
+  winder_speed.id = 7;
+  winder_speed.value = 0;
+  strcpy(winder_speed.label, "WINDER SPEED:");
 
-  screen[3] = &rpm;
-  screen[4] = &rpm_current;
-  screen[5] = &temperature_current_nozzle;
-  screen[6] = &temperature_current_preheat;
+  screen[4] = &rpm;
+  screen[5] = &rpm_current;
+  screen[6] = &temperature_current_nozzle;
+  screen[7] = &temperature_current_preheat;
   screen[0] = &temperature_nozzle;
   screen[1] = &temperature_preheat;
   screen[2] = &fan_speed;
+  screen[3] = &winder_speed;
   
-  for (int i = 3; i < MAX_MENU; i++) {
-    lcd.setCursor(0, i-3);
-     if (i == 3)
+  for (int i = 4; i < MAX_MENU; i++) {
+    lcd.setCursor(0, i-4);
+     if (i == 4)
       lcd.print(">");
      lcd.print(screen[i]->label);
-     lcd.setCursor(17, i-3);
+     lcd.setCursor(17, i-4);
      lcd.print(screen[i]->value);
   }
    menu = 0;
@@ -401,6 +431,7 @@ void click() {
   }
   updateScreen();
 }
+
 void rightTune() {
   if (init_tuning == 0 || init_tuning == 3) {
     Kp++;
@@ -467,12 +498,21 @@ void clickTune() {
 
 void updateValue() {
   if (menu == 3) {
-    if (rpm.value == 0) 
-      motor.disableOutputs();
+    if (winder_speed.value == 0)
+      winder.disableOutputs();
     else
+      winder.enableOutputs();
+    winder_rpm_value = winder_speed.value;
+  }
+  if (menu == 4) {
+    if (rpm.value == 0) {
+      motor.disableOutputs();
+    }
+    else {
       motor.enableOutputs();
+    }
     rpm_value = rpm.value;
-    rpm_current.value = rpm_value;
+    //rpm_current.value = rpm_value;
     if (rpm_value == 0) {
       sensor_speed = 0;
       updateSpeed();
@@ -556,7 +596,7 @@ void updateTemperature() {
     lcd.print(999);
 
   lcd.setCursor(16, 3);
-  lcd.print("/");
+  lcd.print("/   ");
   lcd.setCursor(17, 3);
   if (input_3 <= 0) {
     lcd.print(0);
@@ -592,9 +632,9 @@ void initSafety() {
   lcd.setCursor(0,1);
   lcd.print("SHUTTING HEATER OFF!");
   lcd.setCursor(0,2);
-  lcd.print("UNTIL:    <50");
+  lcd.print("UNTIL:           <50");
   lcd.setCursor(0,3);
-  lcd.print("UNTIL:    <50");
+  lcd.print("UNTIL:           <50");
 }
 
 void updateSafety() {
@@ -602,6 +642,9 @@ void updateSafety() {
   lcd.print(input_1);
   lcd.setCursor(7,3);
   lcd.print(input_2);
+  lcd.print("/");
+  lcd.setCursor(11,3);
+  lcd.print(input_3);
 }
 
 void initTunePID() {
