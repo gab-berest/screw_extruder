@@ -632,9 +632,9 @@ void initSafety() {
   lcd.setCursor(0,1);
   lcd.print("SHUTTING HEATER OFF!");
   lcd.setCursor(0,2);
-  lcd.print("UNTIL:    <50");
+  lcd.print("UNTIL:           <50");
   lcd.setCursor(0,3);
-  lcd.print("UNTIL:    <50");
+  lcd.print("UNTIL:           <50");
 }
 
 void updateSafety() {
@@ -642,6 +642,9 @@ void updateSafety() {
   lcd.print(input_1);
   lcd.setCursor(7,3);
   lcd.print(input_2);
+  lcd.print("/");
+  lcd.setCursor(11,3);
+  lcd.print(input_3);
 }
 
 void initTunePID() {
