@@ -67,7 +67,7 @@
 
 struct Menu {
   int id = 0;
-  int value = 0;
+  float value = 0;
   char label[16];
 };
 
@@ -80,11 +80,11 @@ volatile int buzzer_update = 0;
 volatile int flag_fan = 0;
 
 AccelStepper motor = AccelStepper(AccelStepper::DRIVER, E_STEP_PIN, E_DIR_PIN);
-volatile int rpm_old = 0;
-volatile int rpm_value = 0;
+volatile float rpm_old = 0;
+volatile float rpm_value = 0;
 AccelStepper winder = AccelStepper(AccelStepper::DRIVER, WINDER_STEP_PIN, WINDER_DIR_PIN);
-volatile int winder_rpm_old = 0;
-volatile int winder_rpm_value = 0;
+volatile float winder_rpm_old = 0;
+volatile float winder_rpm_value = 0;
 
 LiquidCrystal lcd(LCD_RS,LCD_EN,LCD_PIN_1,LCD_PIN_2,LCD_PIN_3,LCD_PIN_4);
 int menu = 0;
@@ -153,7 +153,7 @@ volatile unsigned long old_speed_time = 0;
 volatile unsigned long speed_time = 0;
 volatile int flag_speed = 0;
 volatile int detect_speed = 0;
-volatile int sensor_speed = 0;
+volatile float sensor_speed = 0;
 unsigned long test_count = 0;
 
 ///////////////////////////////////
@@ -353,7 +353,7 @@ void setupLCD() {
   strcpy(temperature_current_preheat.label, "PREHEAT TEMP:");
   temperature_nozzle.id = 4;
   temperature_nozzle.value = 25;
-  strcpy(temperature_nozzle.label, "NOZZLE SET TEMP:");
+  strcpy(temperature_nozzle.label, "NOZ SET TEMP:");
   temperature_preheat.id = 5;
   temperature_preheat.value = 25;
   strcpy(temperature_preheat.label, "PRE SET TEMP:");
@@ -404,7 +404,10 @@ void right() {
       menu++;
   }
   else if (screen[menu]->value < 425){
-    screen[menu]->value++;
+    if (menu == 4)
+      screen[menu]->value += 0.1;
+    else
+      screen[menu]->value++;
   }  
   updateScreen();
 }
@@ -416,7 +419,10 @@ void left() {
   }
   else {
     //if (screen[menu]->value > 0)
-    screen[menu]->value--;
+    if (menu == 4)
+      screen[menu]->value -= 0.1;
+    else
+      screen[menu]->value--;
   } 
   updateScreen();
 }
@@ -537,20 +543,21 @@ void updateScreen() {
     lcd.print("                    ");
     lcd.setCursor(0, 0);
     lcd.print(screen[menu]->label);
-    lcd.setCursor(17, 0);
+    if (menu == 4)
+      lcd.setCursor(15, 0);
     lcd.print(screen[menu]->value);
   }
   else {
-    lcd.setCursor(16, 0);
-    lcd.print("    ");
-    lcd.setCursor(17, 0);
+    lcd.setCursor(14, 0);
+    lcd.print("      ");
+    lcd.setCursor(15, 0);
     lcd.print(screen[menu]->value);
   }
   
   if (menu_level != 0) {
-    lcd.setCursor(16, 0);
-    lcd.print("    ");
-    lcd.setCursor(16, 0);
+    lcd.setCursor(14, 0);
+    lcd.print("      ");
+    lcd.setCursor(14, 0);
     lcd.print(">");
     lcd.print(screen[menu]->value);
   }
@@ -558,7 +565,7 @@ void updateScreen() {
     lcd.setCursor(0, 0);
     lcd.print(">");
     lcd.print(screen[menu]->label);
-    lcd.setCursor(17, 0);
+    lcd.setCursor(15, 0);
     lcd.print(screen[menu]->value);
   }
   menu_old = menu;
@@ -566,10 +573,10 @@ void updateScreen() {
 }
 
 void updateSpeed() {
-  lcd.setCursor(17, 1);
-  lcd.print("   ");
-  lcd.setCursor(17, 1);
-  lcd.print((int)sensor_speed);
+  lcd.setCursor(15, 1);
+  lcd.print("     ");
+  lcd.setCursor(15, 1);
+  lcd.print((float)sensor_speed);
 }
 
 void updateTemperature() {
@@ -1086,7 +1093,7 @@ void loop() {
     updateSpeed();
     flag_speed = 0;
   }
-  if ((millis() - old_speed_time) > 3332) {
+  if ((millis() - old_speed_time) > 33333) {
     sensor_speed = 0;
     old_speed_time = millis();
   }
